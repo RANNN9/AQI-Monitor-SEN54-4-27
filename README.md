@@ -10,5 +10,8 @@ Much of the rest of the project remains the same as the previous version, especi
 
 After our experience with alarmingly poor air quality during the California wildfire outbreak in the summer of 2020 I'm very mindful of keeping an eye on particulate levels in the air both inside and outside our home.  The SEN54 plus Feather MCU with InfluxDB and Grafana gives me all the tools I need to do that.
 
-## Usage Note
+## Usage Notes
+
+Important access settings like WiFi SSID and password, ThingSpeak keys, and InfluxDB credentials are contained in a `secrets.h` file that is not included in this repo.  Instead you'll find the file `secrets_template.h`, which should be copied to `secrets.h` and then edited to supply the right access credentials and configuration values to match your deployment environment.
+
 I've written general purpose functions to do data reporting via Dweet, ThingSpeak, and InfluxDB and use them consistently across my Feather Huzzah and ESP32 projects.  In their current form they need to be customized per project to transmit the right data fields depending on what the project is trying to report.  They also require some configuration of the connections to Dweet (in the form of the device name), ThingSpeak (in the form of channel ID number and API write key), and InfluxDB (to specify the server and login account for data logging along with the measurement schema for storing data).  You'll need to edit the project code to use whatever configuration values are appropriate for you.
