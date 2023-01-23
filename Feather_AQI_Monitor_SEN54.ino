@@ -15,36 +15,15 @@
 #include "config.h"
 #include "secrets.h"
 
-#ifdef WiFi
+#ifdef WIFI
   // ESP32 WiFi
   #include <WiFi.h>
 
   // ESP8266 WiFi
-  #include <ESP8266WiFi.h>
+  // #include <ESP8266WiFi.h>
 
   // Use WiFiClient class to create TCP connections and talk to hosts
   WiFiClient client;
-#endif
-
-// External function dependencies
-#ifdef DWEET
-  post_dweet();
-#endif
-
-#ifdef THINGSPEAK
-  post_thingspeak();
-#endif
-
-#ifdef INFLUX
-  // SparkFun SEN5x
-  // extern void post_influx(float pm25, float aqi, float tempF, float vocIndex, float humidity);
-  extern boolean post_influx();
-#endif
-
-#ifdef MQTT
-  //extern void mqttConnect();
-  extern int mqttDeviceWiFiUpdate(int rssi);
-  extern int mqttSensorUpdate(uint16_t co2, float tempF, float humidity);
 #endif
 
 // SparkFun SEN5X
@@ -116,6 +95,29 @@ float MinPm25 = 1999;   /* Observed minimum PM2.5 */
 float MaxPm25 = -99;   /* Observed maximum PM2.5 */
 
 bool internetAvailable;
+int rssi;
+
+// External function dependencies
+#ifdef DWEET
+  post_dweet();
+#endif
+
+#ifdef THINGSPEAK
+  post_thingspeak();
+#endif
+
+#ifdef INFLUX
+  // SparkFun SEN5x
+  // extern void post_influx(float pm25, float aqi, float tempF, float vocIndex, float humidity);
+  // Adafruit PMSA003I
+  extern boolean post_influx(float pm25, float aqi, int rssi);
+#endif
+
+#ifdef MQTT
+  //extern void mqttConnect();
+  extern int mqttDeviceWiFiUpdate(int rssi);
+  extern int mqttSensorUpdate(uint16_t co2, float tempF, float humidity);
+#endif
 
 void setup() 
 {
@@ -133,12 +135,6 @@ void setup()
   #endif
 
   initSensor();
-  #ifdef WIFI
-    if(networkBegin())
-    {
-      internetAvailable = true;
-    }
-  #endif
   // Remember current clock time
   prevReportMs = prevSampleMs = millis();
 }
@@ -190,6 +186,12 @@ void loop()
   // is it time to report averaged values
   if((currentMillis - prevReportMs) >= (REPORT_INTERVAL * 60 *1000)) // converting REPORT_INTERVAL into milliseconds
   {
+    #ifdef WIFI
+      if(networkBegin())
+      {
+        internetAvailable = true;
+      }
+    #endif
     if (numSamples != 0) 
     {
       avgPM25 = pm25Total / numSamples;
@@ -212,11 +214,12 @@ void loop()
         post_thingspeak(avgPM25,pm25toAQI(MinPm25),pm25toAQI(MaxPm25),pm25toAQI(avgPM25));
       #endif
 
-      // And store data to Influx DB (via remote server)    
+      // And store data to Influx DB    
       #ifdef INFLUX
         // SparkFun SEN5x
         // post_influx(avgPM25,pm25toAQI(avgPM25),avgTempF,avgVOC,avgHumidity);
-        post_influx();
+        // Adafruit PMSA003I 
+        post_influx(avgPM25, pm25toAQI(avgPM25), rssi);
       #endif
 
       // Reset counters and accumulators
@@ -244,8 +247,9 @@ void loop()
     {
       if (WiFi.status() == WL_CONNECTED)
       {
-        debugMessage("WiFi IP address issued from " + WIFI_SSID + " is " + WiFi.localIP().toString());
-        debugMessage("WiFi RSSI is: " + String(getWiFiRSSI()) + " dBm");
+        rssi = abs(WiFi.RSSI());
+        debugMessage(String("WiFi IP address issued from ") + WIFI_SSID + " is " + WiFi.localIP().toString());
+        debugMessage(String("WiFi RSSI is: ") + rssi + " dBm");
         return true;
       }
       debugMessage(String("Connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " to " + WIFI_SSID + " failed, trying again in " + CONNECT_ATTEMPT_INTERVAL + " seconds");

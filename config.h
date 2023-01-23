@@ -7,9 +7,9 @@
 
 // Step 1: Set conditional compile flags
 #define DEBUG     // Output to serial port
-// #define WIFI        // use WiFi
+#define WIFI        // use WiFi
 //#define MQTT        // log sensor data to MQTT broker
-// #define INFLUX      // Log data to InfluxDB server
+#define INFLUX      // Log data to InfluxDB server
 // #define DWEET       // Log data to Dweet service
 // #define THINGSPEAK  // Log data to ThingSpeak
 
@@ -49,8 +49,8 @@ const int CONNECT_ATTEMPT_INTERVAL = 10;  // seconds between internet service co
   // CLIENT_ID as defined anove here in config.h as well as device location (e.g., room in 
   // the house) and site (indoors vs. outdoors, typically).
 
-  // #define DEVICE_LOCATION "test"
-  #define DEVICE_LOCATION "RCO2-demo"
+  #define DEVICE_LOCATION "PM25-test"
+  // #define DEVICE_LOCATION "PM25-demo"
   //#define DEVICE_LOCATION "kitchen"
   // #define DEVICE_LOCATION "cellar"
   // #define DEVICE_LOCATION "lab-office"
@@ -58,7 +58,7 @@ const int CONNECT_ATTEMPT_INTERVAL = 10;  // seconds between internet service co
   // #define DEVICE_LOCATION "pocket-office"
 
   #define DEVICE_SITE "indoor"
-  #define DEVICE_TYPE "air quality"
+  #define DEVICE_TYPE "pm25"
 #endif
 
 // Post data to the internet via dweet.io.  Set DWEET_DEVICE to be a
