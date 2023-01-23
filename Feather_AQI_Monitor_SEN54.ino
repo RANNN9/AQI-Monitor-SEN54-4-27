@@ -51,14 +51,15 @@
 //Create SEN5x sensor instance
 // SensirionI2CSen5x sen5x;
 
+// Do we need this on modern Esperiff hardware?
+
 // The used commands use up to 48 bytes. On some Arduinos the default buffer
 // space is not large enough
 // #define MAXBUF_REQUIREMENT 48
 
-// #if (defined(I2C_BUFFER_LENGTH) &&                 \
-//      (I2C_BUFFER_LENGTH >= MAXBUF_REQUIREMENT)) || \
-//     (defined(BUFFER_LENGTH) && BUFFER_LENGTH >= MAXBUF_REQUIREMENT)
-// #define USE_PRODUCT_INFO
+// #if ((defined(I2C_BUFFER_LENGTH) && (I2C_BUFFER_LENGTH >= MAXBUF_REQUIREMENT)) ||
+//     (defined(BUFFER_LENGTH) && (BUFFER_LENGTH >= MAXBUF_REQUIREMENT)))
+//     #define USE_PRODUCT_INFO
 // #endif
 
 // Adafruit PMSA003I
@@ -82,9 +83,9 @@ typedef struct
   // float noxIndex;  // Not supported by SEN54 (only SEN55)
 
   // Adafruit PMSA003I
-  // uint16_t pm10_env,       //< Environmental PM1.0
-  //   pm25_env,            //< Environmental PM2.5
-  //   pm100_env;           //< Environmental PM10.0
+  uint16_t pm10_env;        // Environmental PM1.0
+  uint16_t pm25_env;        // Environmental PM2.5
+  uint16_t pm100_env;       // Environmental PM10.0
   uint16_t particles_03um, //< 0.3um Particle Count
     particles_05um,      //< 0.5um Particle Count
     particles_10um,      //< 1.0um Particle Count
@@ -167,7 +168,16 @@ void loop()
     pm25Total += sensorData.massConcentrationPm2p5;
 
     debugMessage(String("PM2.5 reading is ") + sensorData.massConcentrationPm2p5 + " or AQI " + pm25toAQI(sensorData.massConcentrationPm2p5));
-  
+
+    // Adafruit PMSA003I
+    debugMessage(String("PM2.5 env reading is ") + sensorData.pm25_env + " or AQI " + pm25toAQI(sensorData.pm25_env));
+    debugMessage(String("Particles > 0.3um / 0.1L air:") + sensorData.particles_03um);
+    debugMessage(String("Particles > 0.5um / 0.1L air:") + sensorData.particles_05um);
+    debugMessage(String("Particles > 1.0um / 0.1L air:") + sensorData.particles_10um);
+    debugMessage(String("Particles > 2.5um / 0.1L air:") + sensorData.particles_25um);
+    debugMessage(String("Particles > 5.0um / 0.1L air:") + sensorData.particles_50um);
+    debugMessage(String("Particles > 10 um / 0.1L air:") + sensorData.particles_100um);
+
     // // SparkFun SEN5X
     // debugMessage(String("Temp is ") + sensorData.ambientTemperature + " F");
     // debugMessage(String("Humidity is ") + sensorData.ambientHumidity + "%");
@@ -182,14 +192,15 @@ void loop()
   {
     if (numSamples != 0) 
     {
-      avgPM25 = Pm25 / numSamples;
+      avgPM25 = pm25Total / numSamples;
       if(avgPM25 > MaxPm25) MaxPm25 = avgPM25;
       if(avgPM25 < MinPm25) MinPm25 = avgPM25;
+      debugMessage(String("Average PM2.5 reading for this ") + REPORT_INTERVAL + " minute report interval  is " + avgPM25 + " or AQI " + pm25toAQI(avgPM25));
 
       // SparkFun SEN5x
-      // avgTempF = TemperatureF / numSamples;
-      // avgVOC = VocIndex / numSamples;
-      // avgHumidity = Humidity / numSamples;
+      // avgTempF = tempFTotal / numSamples;
+      // avgVOC = vocTotal / numSamples;
+      // avgHumidity = humidityTotal / numSamples;
   
       /* Post both the current readings and historical max/min readings to the web */
       #ifdef DWEET
@@ -212,16 +223,17 @@ void loop()
       prevReportMs = currentMillis;
       numSamples = 0;
       pm25Total = 0;
-      tempFTotal = 0;
-      vocTotal = 0;
-      humidityTotal = 0;
+      // Sparkfun SEN5x
+      // tempFTotal = 0;
+      // vocTotal = 0;
+      // humidityTotal = 0;
     }
   }
 }
 
-bool networkBegin()
-{
-  #ifdef WIFI
+#ifdef WIFI
+  bool networkBegin()
+  {
     // set hostname has to come before WiFi.begin
     WiFi.hostname(CLIENT_ID);
 
@@ -242,9 +254,8 @@ bool networkBegin()
     }
     debugMessage("Failed to connect to WiFi");
     return false;
-    }
-  #endif
-}
+  }
+#endif
 
 int initSensor()
 {
@@ -340,17 +351,19 @@ int readSensor()
   if (! aqi.read(&data)) 
   {
     debugMessage("Could not read PMSA003I sensor data");
-    prevSampleMs = currentMillis;
+    // ?? why is this here?
+    //prevSampleMs = currentMillis;
     return 0;
   }
   // successful read
   sensorData.massConcentrationPm1p0 = data.pm10_standard;
   sensorData.massConcentrationPm2p5 = data.pm25_standard;
   sensorData.massConcentrationPm10p0 = data.pm100_standard;
+  sensorData.pm25_env = data.pm25_env;
   sensorData.particles_03um = data.particles_03um;
   sensorData.particles_05um = data.particles_05um;
   sensorData.particles_10um = data.particles_10um;
-  sensorData.particles_25um = data.particles_25m;
+  sensorData.particles_25um = data.particles_25um;
   sensorData.particles_50um = data.particles_50um;
   sensorData.particles_100um = data.particles_100um;
   debugMessage("Successful sensor read");
