@@ -8,7 +8,7 @@
 // Step 1: Set conditional compile flags
 #define DEBUG     // Output to serial port
 #define WIFI        // use WiFi
-//#define MQTT        // log sensor data to MQTT broker
+#define MQTT        // log sensor data to MQTT broker
 #define INFLUX      // Log data to InfluxDB server
 // #define DWEET       // Log data to Dweet service
 // #define THINGSPEAK  // Log data to ThingSpeak
@@ -33,11 +33,9 @@ const int CONNECT_ATTEMPT_INTERVAL = 10;  // seconds between internet service co
   // e.g. #define MQTT_PUB_TOPIC1   "sircoolio/feeds/pocket-office.temperature"
 
   // structure: site/room/device/data 
-  #define MQTT_PUB_TOPIC1   "7828/demo/rco2/temperature"
-  #define MQTT_PUB_TOPIC2   "7828/demo/rco2/humidity"
-  #define MQTT_PUB_TOPIC3   "7828/demo/rco2/co2"
-  #define MQTT_PUB_TOPIC5   "7828/demo/rco2/battery-voltage"
-  #define MQTT_PUB_TOPIC6   "7828/demo/rco2/rssi"
+  #define MQTT_PUB_TOPIC1   "7828/demo/pm25/pm25"
+  #define MQTT_PUB_TOPIC2   "7828/demo/pm25/aqi"
+  #define MQTT_PUB_TOPIC3   "7828/demo/pm25/rssi"
 #endif
 
 #ifdef INFLUX  

@@ -114,9 +114,15 @@ int rssi;
 #endif
 
 #ifdef MQTT
-  //extern void mqttConnect();
+  // MQTT interface depends on the underlying network client object, which is defined and
+  // managed here (so needs to be defined here).
+  #include <Adafruit_MQTT.h>
+  #include <Adafruit_MQTT_Client.h>
+  Adafruit_MQTT_Client pm25_mqtt(&client, MQTT_BROKER, MQTT_PORT, CLIENT_ID, MQTT_USER, MQTT_PASS);
+
+  // Adafruit PMSA003I
   extern int mqttDeviceWiFiUpdate(int rssi);
-  extern int mqttSensorUpdate(uint16_t co2, float tempF, float humidity);
+  extern int mqttSensorUpdate(float pm25, float aqi);
 #endif
 
 void setup() 
@@ -220,6 +226,12 @@ void loop()
         // post_influx(avgPM25,pm25toAQI(avgPM25),avgTempF,avgVOC,avgHumidity);
         // Adafruit PMSA003I 
         post_influx(avgPM25, pm25toAQI(avgPM25), rssi);
+      #endif
+
+      #ifdef MQTT
+        // Adafruit PMSA003I
+        mqttDeviceWiFiUpdate(rssi);
+        mqttSensorUpdate(avgPM25, pm25toAQI(avgPM25));
       #endif
 
       // Reset counters and accumulators
