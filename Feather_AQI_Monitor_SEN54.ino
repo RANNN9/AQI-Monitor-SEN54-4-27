@@ -11,16 +11,14 @@
 #include "config.h"
 #include "secrets.h"
 
-#ifdef WIFI
-  // ESP32 WiFi
-  #include <WiFi.h>
+// ESP32 WiFi
+// #include <WiFi.h>
 
-  // ESP8266 WiFi
-  // #include <ESP8266WiFi.h>
+//ESP8266 WiFi
+#include <ESP8266WiFi.h>
 
-  // Use WiFiClient class to create TCP connections and talk to hosts
-  WiFiClient client;
-#endif
+// Use WiFiClient class to create TCP connections and talk to hosts
+WiFiClient client;
 
 //Create SEN5x sensor instance
 SensirionI2CSen5x sen5x;
@@ -59,7 +57,7 @@ unsigned int numReports = 0;      // Number of capture intervals observed
 float MinPm25 = 1999;   /* Observed minimum PM2.5 */
 float MaxPm25 = -99;   /* Observed maximum PM2.5 */
 
-bool internetAvailable;
+bool internetAvailable = false;
 int rssi;
 
 // External function dependencies
@@ -68,11 +66,11 @@ int rssi;
 #endif
 
 #ifdef THINGSPEAK
-  post_thingspeak();
+  extern void post_thingspeak(avgPM25,pm25toAQI(MinPm25),pm25toAQI(MaxPm25),pm25toAQI(avgPM25));
 #endif
 
 #ifdef INFLUX
-  extern void post_influx(float pm25, float aqi, float tempF, float vocIndex, float humidity);
+  extern bool post_influx(float pm25, float aqi, float tempF, float vocIndex, float humidity, int rssi);
 #endif
 
 #ifdef MQTT
@@ -83,8 +81,8 @@ int rssi;
   Adafruit_MQTT_Client pm25_mqtt(&client, MQTT_BROKER, MQTT_PORT, CLIENT_ID, MQTT_USER, MQTT_PASS);
 
   // Adafruit PMSA003I
-  extern int mqttDeviceWiFiUpdate(int rssi);
-  extern int mqttSensorUpdate(float pm25, float aqi);
+  extern bool mqttDeviceWiFiUpdate(int rssi);
+  extern bool mqttSensorUpdate(float pm25, float aqi, float tempF, float vocIndex, float humidity);
 #endif
 
 void setup() 
@@ -95,16 +93,21 @@ void setup()
     // wait for serial port connection
     while (!Serial);
 
-    // Confirm key site configuration parameters
+    // Display key configuration parameters
     debugMessage("PM2.5 monitor started");
-    debugMessage("Client ID: " + String(CLIENT_ID));
-    debugMessage(String(SAMPLE_INTERVAL) + " second sample interval");
-    debugMessage(String(REPORT_INTERVAL) + " minute report interval");
+    debugMessage(String("Sample interval is ") + SAMPLE_INTERVAL + " seconds");
+    debugMessage(String("Report interval is ") + REPORT_INTERVAL + " minutes");
+    debugMessage(String("Internet service reconnect delay is ") + CONNECT_ATTEMPT_INTERVAL + " seconds");
   #endif
 
+  // handle error condition
   initSensor();
+
   // Remember current clock time
   prevReportMs = prevSampleMs = millis();
+
+  if(networkConnect())
+    internetAvailable = true;
 }
 
 void loop()
@@ -115,51 +118,62 @@ void loop()
   // is it time to read the sensor
   if((currentMillis - prevSampleMs) >= (SAMPLE_INTERVAL * 1000)) // converting SAMPLE_INTERVAL into milliseconds
   {
-    if (!readSensor())
-    {
-      // handle error condition
+    if (readSensor()){
+      numSamples++;
+
+      // convert temp from C to F
+      sensorData.ambientTemperature = 32.0 + (1.8*sensorData.ambientTemperature);
+
+      // add to the running totals
+      pm25Total += sensorData.massConcentrationPm2p5;
+      tempFTotal += sensorData.ambientTemperature;
+      humidityTotal += sensorData.ambientHumidity;
+      vocTotal += sensorData.vocIndex;
+
+      debugMessage(String("PM2.5 reading is ") + sensorData.massConcentrationPm2p5 + " or AQI " + pm25toAQI(sensorData.massConcentrationPm2p5));
+      debugMessage(String("Temp is ") + sensorData.ambientTemperature + " F");
+      debugMessage(String("Humidity is ") + sensorData.ambientHumidity + "%");
+      debugMessage(String("VOC level is ") + sensorData.vocIndex);
+      debugMessage(String("Sample count is ") + numSamples);
+      debugMessage(String("Running PM25 total for this sample period is ") + pm25Total);
+      debugMessage(String("Running tempF total for this sample period is ") + tempFTotal);
+      debugMessage(String("Running humidity total for this sample period is ") + humidityTotal);
+      debugMessage(String("Running VOC index total for this sample period is ") + vocTotal);
+
+      // Save sample time
+      prevSampleMs = currentMillis;
     }
-    numSamples++;
-
-    // convert temp from C to F
-    sensorData.ambientTemperature = 32.0 + (1.8*sensorData.ambientTemperature);
-    tempFTotal += sensorData.Temperature;
-    humidityTotal += sensorData.ambientHumidity;
-    vocTotal += sensorData.vocIndex;
-
-    // add to the running totals
-    pm25Total += sensorData.massConcentrationPm2p5;
-
-    debugMessage(String("PM2.5 reading is ") + sensorData.massConcentrationPm2p5 + " or AQI " + pm25toAQI(sensorData.massConcentrationPm2p5));
-    debugMessage(String("Temp is ") + sensorData.ambientTemperature + " F");
-    debugMessage(String("Humidity is ") + sensorData.ambientHumidity + "%");
-    debugMessage(String("VOC level is ") + sensorData.VocIndex);
-
-    // Save sample time
-    prevSampleMs = currentMillis;
+    else
+    {
+      debugMessage("Could not read SEN54 sensor data");
+    }
   }
 
   // is it time to report averaged values
   if((currentMillis - prevReportMs) >= (REPORT_INTERVAL * 60 *1000)) // converting REPORT_INTERVAL into milliseconds
   {
-    #ifdef WIFI
-      if(networkBegin())
-      {
-        internetAvailable = true;
-      }
-    #endif
     if (numSamples != 0) 
     {
       avgPM25 = pm25Total / numSamples;
       if(avgPM25 > MaxPm25) MaxPm25 = avgPM25;
       if(avgPM25 < MinPm25) MinPm25 = avgPM25;
-      debugMessage(String("Average PM2.5 reading for this ") + REPORT_INTERVAL + " minute report interval  is " + avgPM25 + " or AQI " + pm25toAQI(avgPM25));
 
       avgTempF = tempFTotal / numSamples;
       avgVOC = vocTotal / numSamples;
       avgHumidity = humidityTotal / numSamples;
+
+      debugMessage(String("Average PM2.5 reading for this ") + REPORT_INTERVAL + " minute report interval  is " + avgPM25 + " or AQI " + pm25toAQI(avgPM25));
+      debugMessage(String("Average temp reading for this ") + REPORT_INTERVAL + " minute report interval  is " + avgTempF);
+      debugMessage(String("Average humidity reading for this ") + REPORT_INTERVAL + " minute report interval  is " + avgHumidity);
+      debugMessage(String("Average VoC reading for this ") + REPORT_INTERVAL + " minute report interval  is " + avgVOC);
+
+      // reconnect to WiFi if needed
+      if (WiFi.status() != WL_CONNECTED){
+          WiFi.disconnect();
+          WiFi.reconnect();
+      }
   
-      /* Post both the current readings and historical max/min readings to the web */
+      /* Post both the current readings and historical max/min readings to the internet */
       #ifdef DWEET
         post_dweet(avgPM25,pm25toAQI(MinPm25),pm25toAQI(MaxPm25),pm25toAQI(avgPM25),avgTempF,avgVOC,avgHumidity);
       #endif
@@ -169,56 +183,58 @@ void loop()
         post_thingspeak(avgPM25,pm25toAQI(MinPm25),pm25toAQI(MaxPm25),pm25toAQI(avgPM25));
       #endif
 
-      // And store data to Influx DB    
       #ifdef INFLUX
-        post_influx(avgPM25,pm25toAQI(avgPM25),avgTempF,avgVOC,avgHumidity);
+        if(!post_influx(avgPM25,pm25toAQI(avgPM25),avgTempF,avgVOC,avgHumidity,rssi))
+          debugMessage("Did not write to influxDB");
       #endif
 
       #ifdef MQTT
-        mqttDeviceWiFiUpdate(rssi);
-        mqttSensorUpdate(avgPM25, pm25toAQI(avgPM25));
+        if(!mqttDeviceWiFiUpdate(rssi))
+          debugMessage("Did not write device data to MQTT broker");
+        if(!mqttSensorUpdate(avgPM25, pm25toAQI(avgPM25),avgTempF,avgVOC,avgHumidity))
+          debugMessage("Did not write environment data to MQTT broker");
       #endif
 
       // Reset counters and accumulators
       prevReportMs = currentMillis;
       numSamples = 0;
       pm25Total = 0;
-      // Sparkfun SEN5x
-      // tempFTotal = 0;
-      // vocTotal = 0;
-      // humidityTotal = 0;
+      tempFTotal = 0;
+      vocTotal = 0;
+      humidityTotal = 0;
+    }
+    else
+    {
+      debugMessage("No samples to average and report on");
     }
   }
 }
 
-#ifdef WIFI
-  bool networkBegin()
+bool networkConnect()
+{
+  // set hostname has to come before WiFi.begin
+  WiFi.hostname(CLIENT_ID);
+
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+  for (int tries = 1; tries <= CONNECT_ATTEMPT_LIMIT; tries++)
+  // Attempts WiFi connection, and if unsuccessful, re-attempts after CONNECT_ATTEMPT_INTERVAL second delay for CONNECT_ATTEMPT_LIMIT times
   {
-    // set hostname has to come before WiFi.begin
-    WiFi.hostname(CLIENT_ID);
-
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
-
-    for (int tries = 1; tries <= CONNECT_ATTEMPT_LIMIT; tries++)
-    // Attempts WiFi connection, and if unsuccessful, re-attempts after CONNECT_ATTEMPT_INTERVAL second delay for CONNECT_ATTEMPT_LIMIT times
+    if (WiFi.status() == WL_CONNECTED)
     {
-      if (WiFi.status() == WL_CONNECTED)
-      {
-        rssi = abs(WiFi.RSSI());
-        debugMessage(String("WiFi IP address issued from ") + WIFI_SSID + " is " + WiFi.localIP().toString());
-        debugMessage(String("WiFi RSSI is: ") + rssi + " dBm");
-        return true;
-      }
-      debugMessage(String("Connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " to " + WIFI_SSID + " failed, trying again in " + CONNECT_ATTEMPT_INTERVAL + " seconds");
-      // use of delay() OK as this is initialization code
-      delay(CONNECT_ATTEMPT_INTERVAL * 1000); // convered into milliseconds
+      rssi = abs(WiFi.RSSI());
+      debugMessage(String("WiFi IP address lease from ") + WIFI_SSID + " is " + WiFi.localIP().toString());
+      debugMessage(String("WiFi RSSI is: ") + rssi + " dBm");
+      return true;
     }
-    debugMessage("Failed to connect to WiFi");
-    return false;
+    debugMessage(String("Connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " to " + WIFI_SSID + " failed");
+    // use of delay() OK as this is initialization code
+    delay(CONNECT_ATTEMPT_INTERVAL * 1000); // convered into milliseconds
   }
-#endif
+  return false;
+}
 
-int initSensor()
+bool initSensor()
 {
   // SparkFun SEN5X
   uint16_t error;
@@ -238,7 +254,7 @@ int initSensor()
   {
     errorToString(error, errorMessage, 256);
     debugMessage(String(errorMessage) + " error during SEN5x reset");
-    return 0;
+    return false;
   }
   
   // set a temperature offset in degrees celsius
@@ -272,13 +288,13 @@ int initSensor()
   if (error) {
       errorToString(error, errorMessage, 256);
       debugMessage(String(errorMessage) + " error during SEN5x startMeasurement");
-      return 0;
+      return false;
   }
   debugMessage("SEN5x initialized");
-  return 1;
+  return true;
 }
 
-int readSensor()
+bool readSensor()
 {
   // SparkFun SEN5X
   uint16_t error;
@@ -291,12 +307,9 @@ int readSensor()
   {
       errorToString(error, errorMessage, 256);
       debugMessage(String(errorMessage) + " error during SEN5x read");
-      prevSampleMs = currentMillis;
-      return 0;
+      return false;
   }
-  // successful read
-  debugMessage("Successful sensor read");
-  return 1;
+  return true;
 }
 
 float pm25toAQI(float pm25)

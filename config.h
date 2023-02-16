@@ -7,7 +7,6 @@
 
 // Step 1: Set conditional compile flags
 #define DEBUG     // Output to serial port
-#define WIFI        // use WiFi
 #define MQTT        // log sensor data to MQTT broker
 #define INFLUX      // Log data to InfluxDB server
 // #define DWEET       // Log data to Dweet service
@@ -22,20 +21,23 @@
 #endif
 
 const int CONNECT_ATTEMPT_LIMIT = 3;      // max connection attempts to internet services
-const int CONNECT_ATTEMPT_INTERVAL = 10;  // seconds between internet service connect attempts
+const int CONNECT_ATTEMPT_INTERVAL = 5;  // seconds between internet service connect attempts
 
 // set client ID; used by mqtt and wifi
-#define CLIENT_ID "RCO2"
+#define CLIENT_ID "PM25"
 
 #ifdef MQTT
   // Adafruit I/O
   // structure: username/feeds/groupname.feedname or username/feeds/feedname
-  // e.g. #define MQTT_PUB_TOPIC1   "sircoolio/feeds/pocket-office.temperature"
+  // e.g. #define MQTT_PUB_TEMPF   "sircoolio/feeds/pocket-office.tempf"
 
   // structure: site/room/device/data 
-  #define MQTT_PUB_TOPIC1   "7828/demo/pm25/pm25"
-  #define MQTT_PUB_TOPIC2   "7828/demo/pm25/aqi"
-  #define MQTT_PUB_TOPIC3   "7828/demo/pm25/rssi"
+  #define MQTT_PUB_PM25       "7828/demo/pm25/pm25"
+  #define MQTT_PUB_AQI        "7828/demo/pm25/aqi"
+  #define MQTT_PUB_TEMPF      "7828/demo/pm25/tempf"
+  #define MQTT_PUB_VOC        "7828/demo/pm25/vocindex"
+  #define MQTT_PUB_HUMIDITY   "7828/demo/pm25/humidity"
+  #define MQTT_PUB_RSSI       "7828/demo/pm25/rssi"
 #endif
 
 #ifdef INFLUX  

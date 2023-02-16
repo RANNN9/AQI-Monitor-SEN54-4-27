@@ -28,29 +28,26 @@
 
   void mqttConnect()
   // Connects and reconnects to MQTT broker, call as needed to maintain connection
-  {
-    int8_t mqttErr;
-    int8_t tries;
-  
+  {  
     // exit if already connected
     if (pm25_mqtt.connected())
     {
       debugMessage(String("Already connected to MQTT broker ") + MQTT_BROKER);
       return;
     }
-    for(tries =1; tries <= CONNECT_ATTEMPT_LIMIT; tries++)
+    
+    int8_t mqttErr;
+
+    // Attempts MQTT connection, and if unsuccessful, re-attempts after CONNECT_ATTEMPT_INTERVAL second delay for CONNECT_ATTEMPT_LIMIT times
+    for(int tries = 1; tries <= CONNECT_ATTEMPT_LIMIT; tries++)
     {
-      debugMessage(String(MQTT_BROKER) + " connect attempt " + tries + " of " + CONNECT_ATTEMPT_LIMIT);
       if ((mqttErr = pm25_mqtt.connect()) == 0)
       {
-        debugMessage("Connected to MQTT broker");
+        debugMessage(String("Connected to MQTT broker ") + MQTT_BROKER);
         return;
       }
-      else
-      {
-        // generic MQTT error
-        debugMessage(pm25_mqtt.connectErrorString(mqttErr));
-  
+      // else
+      // {
         // Adafruit IO connect errors
         // switch (mqttErr)
         // {
@@ -62,66 +59,100 @@
         //   case 6: debugMessage("Adafruit MQTT: Failed to subscribe"); break;
         //   default: debugMessage("Adafruit MQTT: GENERIC - Connection failed"); break;
         // }
-        pm25_mqtt.disconnect();
-        debugMessage(String("Attempt failed, trying again in ") + CONNECT_ATTEMPT_INTERVAL + " seconds");
-        delay(CONNECT_ATTEMPT_INTERVAL*1000);
-      }
+      pm25_mqtt.disconnect();
+      debugMessage(String("MQTT connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " failed with error msg: " + pm25_mqtt.connectErrorString(mqttErr));
+      delay(CONNECT_ATTEMPT_INTERVAL*1000);
+      // }
     }
-    debugMessage(String("Connection failed to MQTT broker: ") + MQTT_BROKER);
   } 
 
-  int mqttDeviceWiFiUpdate(int rssi)
+  bool mqttDeviceWiFiUpdate(int rssi)
   {
-    int result = 0;
+    bool result = false;
     if (internetAvailable)
     {
-      // Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TOPIC3, MQTT_QOS_1); // if problematic, remove QOS parameter
-      Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TOPIC3);
+      // Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_RSSI, MQTT_QOS_1); // if problematic, remove QOS parameter
+      Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_RSSI);
+
       mqttConnect();
 
       if (rssiLevelPub.publish(rssi))
       {
         debugMessage("MQTT publish: WiFi RSSI succeeded");
-        result = 1;
+        result = true;
       }
       else
       {
         debugMessage("MQTT publish: WiFi RSSI failed");
       }
-      pm25_mqtt.disconnect();
+      //pm25_mqtt.disconnect();
     }
     return(result);
   }
   
-  int mqttSensorUpdate(float pm25, float aqi)
+  bool mqttSensorUpdate(float pm25, float aqi, float tempF, float vocIndex, float humidity)
   // Publishes sensor data to MQTT broker
   {
-    // Adafruit_MQTT_Publish tempPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TOPIC1, MQTT_QOS_1); // if problematic, remove QOS parameter
-    // Adafruit_MQTT_Publish humidityPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TOPIC2, MQTT_QOS_1);
-    Adafruit_MQTT_Publish pm25Pub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TOPIC1);
-    Adafruit_MQTT_Publish aqiPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TOPIC2);
-    int result = 1;
-    
-    mqttConnect();
-    // Attempt to publish sensor data
-    if(pm25Pub.publish(pm25))
+    bool result = false;
+    if (internetAvailable)
     {
-      debugMessage("MQTT publish: Temperature succeeded");
+      // add ,MQTT_QOS_1); if problematic, remove QOS parameter
+      Adafruit_MQTT_Publish tempfPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TEMPF);
+      Adafruit_MQTT_Publish humidityPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_HUMIDITY);
+      Adafruit_MQTT_Publish vocPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_VOC);
+      Adafruit_MQTT_Publish pm25Pub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_PM25);
+      Adafruit_MQTT_Publish aqiPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_AQI);
+
+      mqttConnect();
+
+      // Attempt to publish sensor data
+      if(pm25Pub.publish(pm25))
+      {
+        debugMessage("MQTT publish: PM2.5 succeeded");
+        result = true;
+      }
+      else {
+        debugMessage("MQTT publish: PM2.5 failed");
+      }
+      
+      if(aqiPub.publish(aqi))
+      {
+        debugMessage("MQTT publish: AQI succeeded");
+        result = true;
+      }
+      else {
+        debugMessage("MQTT publish: AQI failed");
+        result = false;
+      }
+
+      if(vocPub.publish(vocIndex))
+      {
+        debugMessage("MQTT publish: VOC index succeeded");
+        result = true;
+      }
+      else {
+        debugMessage("MQTT publish: VOC index failed");
+      }
+
+      if(tempfPub.publish(tempF))
+      {
+        debugMessage("MQTT publish: Temperature succeeded");
+        result = true;
+      }
+      else {
+        debugMessage("MQTT publish: Temperature failed");
+      }
+
+      if(humidityPub.publish(humidity))
+      {
+        debugMessage("MQTT publish: Humidity succeeded");
+        result = true;
+      }
+      else {
+        debugMessage("MQTT publish: Humidity failed");
+      }
+      //pm25_mqtt.disconnect();
     }
-    else {
-      debugMessage("MQTT publish: Temperature failed");
-      result = 0;
-    }
-    
-    if(aqiPub.publish(aqi))
-    {
-      debugMessage("MQTT publish: Humidity succeeded");
-    }
-    else {
-      debugMessage("MQTT publish: Humidity failed");
-      result = 0;
-    }
-    pm25_mqtt.disconnect();
     return(result);
   }
 #endif
