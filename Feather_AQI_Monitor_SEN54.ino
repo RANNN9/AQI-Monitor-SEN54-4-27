@@ -12,16 +12,18 @@
 #include "secrets.h"
 
 // ESP32 WiFi
-// #include <WiFi.h>
+#include <WiFi.h>
 
 //ESP8266 WiFi
-#include <ESP8266WiFi.h>
+//#include <ESP8266WiFi.h>
 
 // Use WiFiClient class to create TCP connections and talk to hosts
 WiFiClient client;
 
 //Create SEN5x sensor instance
 SensirionI2CSen5x sen5x;
+//Simulate sensor operations, e.g. for testing
+#define SIMULATE_SENSOR
 
 // global variables
 
@@ -92,6 +94,9 @@ void setup()
     Serial.begin(115200);
     // wait for serial port connection
     while (!Serial);
+
+    // Enable LED for visual confirmation of reporting
+    pinMode(LED_BUILTIN,OUTPUT);
 
     // Display key configuration parameters
     debugMessage("PM2.5 monitor started");
@@ -172,7 +177,13 @@ void loop()
           WiFi.disconnect();
           WiFi.reconnect();
       }
-  
+
+      // Blink the LED
+      digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
+      delay(500);                // wait for a half second
+      digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
+      delay(500);
+
       /* Post both the current readings and historical max/min readings to the internet */
       #ifdef DWEET
         post_dweet(avgPM25,pm25toAQI(MinPm25),pm25toAQI(MaxPm25),pm25toAQI(avgPM25),avgTempF,avgVOC,avgHumidity);
@@ -240,6 +251,11 @@ bool initSensor()
   uint16_t error;
   char errorMessage[256];
 
+  // If we're simulating the sensor there's nothing to init & we're good to go
+  #ifdef SIMULATE_SENSOR
+    return true;
+  #endif
+
   // Handle two ESP32 I2C ports
   #if defined(ARDUINO_ADAFRUIT_QTPY_ESP32S2) || defined(ARDUINO_ADAFRUIT_QTPY_ESP32S3_NOPSRAM) || defined(ARDUINO_ADAFRUIT_QTPY_ESP32S3) || defined(ARDUINO_ADAFRUIT_QTPY_ESP32_PICO)
     Wire1.begin();
@@ -299,6 +315,20 @@ bool readSensor()
   // SparkFun SEN5X
   uint16_t error;
   char errorMessage[256];
+
+  // If we're simulating the sensor generate some reasonable values for measurements
+  #ifdef SIMULATE_SENSOR
+    sensorData.massConcentrationPm1p0 = 1.0;
+    sensorData.massConcentrationPm2p5 = 2.5;
+    sensorData.massConcentrationPm4p0 = 4.0;
+    sensorData.massConcentrationPm10p0 = 10.0;
+    sensorData.ambientHumidity = 56.7;
+    sensorData.ambientTemperature = 20.0;
+    sensorData.vocIndex = 27.0;
+    sensorData.noxIndex = 5.0;
+    return true;
+  #endif
+
   error = sen5x.readMeasuredValues(
         sensorData.massConcentrationPm1p0, sensorData.massConcentrationPm2p5, sensorData.massConcentrationPm4p0,
         sensorData.massConcentrationPm10p0, sensorData.ambientHumidity, sensorData.ambientTemperature, sensorData.vocIndex,

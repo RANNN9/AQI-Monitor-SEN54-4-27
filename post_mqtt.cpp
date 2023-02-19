@@ -109,6 +109,7 @@
       if(pm25Pub.publish(pm25))
       {
         debugMessage("MQTT publish: PM2.5 succeeded");
+        debugMessage(MQTT_PUB_PM25);
         result = true;
       }
       else {

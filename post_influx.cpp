@@ -5,12 +5,12 @@
   See README.md for target information and revision history
 */
 
-  #include "Arduino.h"
+#include "Arduino.h"
 
-  // hardware and internet configuration parameters
-  #include "config.h"
-  // private credentials for network, MQTT, weather provider
-  #include "secrets.h"
+// hardware and internet configuration parameters
+#include "config.h"
+// private credentials for network, MQTT, weather provider
+#include "secrets.h"
 
 // Only compile if InfluxDB enabled
 #ifdef INFLUX

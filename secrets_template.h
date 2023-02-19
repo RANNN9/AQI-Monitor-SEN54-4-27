@@ -5,6 +5,14 @@
 // #define WIFI_SSID "YOUR_WIFI_SSID"
 // #define WIFI_PASS "YOUR_WIFI_PASSWORD"
 
+// MQTT configuration settings
+// #ifdef MQTT
+//  #define MQTT BROKER    "mqtt.hostname.local or IP address"
+// 	#define MQTT_PORT  			port_number	// use 8883 for SSL
+// 	#define MQTT_USER			 "key_value"
+//  #define MQTT_PASSWORD  "key_value"
+// #endif
+
 // // Device configuration info for dweet.io & ThingSpeak
 // /* Info for home cellar monitor */
 // #define DWEET_DEVICE "UNIQUE_DWEET_DEVICE_NAME"
