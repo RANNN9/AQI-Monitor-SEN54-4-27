@@ -18,6 +18,10 @@
   // Shared helper function
   extern void debugMessage(String messageText);
 
+  #ifdef HASSIO_MQTT
+    extern void hassio_mqtt_publish(float pm25, float aqi, float tempF, float vocIndex, float humidity);
+  #endif
+
   // Status variables shared across various functions
   extern bool internetAvailable;
 
@@ -152,6 +156,13 @@
       else {
         debugMessage("MQTT publish: Humidity failed");
       }
+
+      #ifdef HASSIO_MQTT
+        // Either configure sensors in Home Assistant's configuration.yaml file
+        // directly or attempt to do it via MQTT auto-discovery
+        // hassio_mqtt_setup();  // Config for MQTT auto-discovery
+        hassio_mqtt_publish(pm25,aqi,tempF,vocIndex,humidity);
+      #endif
       //pm25_mqtt.disconnect();
     }
     return(result);

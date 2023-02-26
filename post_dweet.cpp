@@ -7,19 +7,13 @@
 // private credentials for network, MQTT, weather provider
 #include "secrets.h"
 
-// ESP32 WiFi
-#include <WiFi.h>
-
-//ESP8266 WiFi
-//#include <ESP8266WiFi.h>
-
 // Post a dweet to report sensor data readings.  This routine blocks while
 // talking to the network, so may take a while to execute.
 
 #ifdef DWEET
 
-  // WiFi client object shared with main() routine
-  //extern WiFiClient client;  // (Does this have to be global/shared??)
+  // Shared helper function(s)
+  extern void debugMessage(String messageText);
 
   // David's original PM2.5 dweet code
   const char* dweet_host = "dweet.io";
@@ -28,20 +22,15 @@
     WiFiClient dweet_client;
 
     if(WiFi.status() != WL_CONNECTED) {
-      Serial.print("Lost network connection to '");
-      Serial.print(WIFI_SSID);
-      Serial.println("'!");
+      debugMessage("Lost network connection to " + String(WIFI_SSID) + "!");
       return;
     }
     
-    Serial.print("connecting to ");
-    Serial.print(dweet_host);
-    Serial.print(" as ");
-    Serial.println(String(DWEET_DEVICE));
+    debugMessage("Connecting to " + String(dweet_host) + " as " + String(DWEET_DEVICE));
         
     // Use our WiFiClient to connect to dweet
     if (!dweet_client.connect(dweet_host, 80)) {
-      Serial.println("connection failed");
+      debugMessage("Connection failed!");
       return;
     }
 
@@ -50,7 +39,7 @@
 
     // Use HTTP post and send a data payload as JSON
     
-    String postdata = "{\"wifi_rssi\":\""     + String(rssi)           + "\"," +
+    String postdata = "{\"wifi_rssi\":\""     + String(rssi)          + "\"," +
                       "\"AQI\":\""           + String(aqi,2)          + "\"," +
                       "\"address\":\""       + ip.toString()          + "\"," +
                       "\"temperature\":\""   + String(tempF,1)        + "\"," +
@@ -62,23 +51,29 @@
     // Note that the dweet device 'name' gets set here, is needed to fetch values
     dweet_client.println("POST /dweet/for/" + String(DWEET_DEVICE) + " HTTP/1.1");
     dweet_client.println("Host: dweet.io");
-    dweet_client.println("User-Agent: ESP8266 (orangemoose)/1.0");
+    dweet_client.println("User-Agent: ESP32/ESP8266 (orangemoose)/1.0");
     dweet_client.println("Cache-Control: no-cache");
     dweet_client.println("Content-Type: application/json");
     dweet_client.print("Content-Length: ");
     dweet_client.println(postdata.length());
     dweet_client.println();
     dweet_client.println(postdata);
-    Serial.println(postdata);
+    debugMessage("Dweet POST:");
+    debugMessage(postdata);
 
     delay(1500);  
+
     // Read all the lines of the reply from server (if any) and print them to Serial Monitor
-    while(dweet_client.available()){
-      String line = dweet_client.readStringUntil('\r');
-      Serial.print(line);
-    }
+    #ifdef DEBUG
+      Serial.println("Dweet server response:");
+      while(dweet_client.available()){
+        String line = dweet_client.readStringUntil('\r');
+        Serial.print(line);
+      }
+      Serial.println("-----");
+    #endif
     
-    Serial.println("closing connection");
-    Serial.println();
+    // Close client connection to dweet server
+    dweet_client.stop();
   }
 #endif

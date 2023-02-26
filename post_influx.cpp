@@ -59,11 +59,13 @@
       // Add constant Influx data point tags - only do once, will be added to all individual data points
       // Modify if required to reflect your InfluxDB data model (and set values in config.h)
       // First for environmental data
-      dbenvdata.addTag("device", DEVICE_TYPE);
+      dbenvdata.addTag("device", DEVICE_NAME);
+      dbenvdata.addTag("device-type", DEVICE_TYPE);
       dbenvdata.addTag("location", DEVICE_LOCATION);
       dbenvdata.addTag("site", DEVICE_SITE);
       // And again for device data
-      dbdevdata.addTag("device", DEVICE_TYPE);
+      dbdevdata.addTag("device", DEVICE_NAME);
+      dbdevdata.addTag("device-type", DEVICE_TYPE);
       dbdevdata.addTag("location", DEVICE_LOCATION);
       dbdevdata.addTag("site", DEVICE_SITE);
 
@@ -84,9 +86,9 @@
         // Report sensor readings
         dbenvdata.addField("pm25", pm25);
         dbenvdata.addField("aqi", aqi);
-        dbenvdata.addField("tempF", aqi);
-        dbenvdata.addField("vocIndex", aqi);
-        dbenvdata.addField("humidity", aqi);
+        dbenvdata.addField("temperature", tempF);
+        dbenvdata.addField("vocIndex", vocIndex);
+        dbenvdata.addField("humidity", humidity);
         // Write point via connection to InfluxDB host
         if (!dbclient.writePoint(dbenvdata)) {
           debugMessage(String("InfluxDB write failed: ") + dbclient.getLastErrorMessage());

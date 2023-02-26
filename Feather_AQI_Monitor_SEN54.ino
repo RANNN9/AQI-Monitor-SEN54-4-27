@@ -11,19 +11,11 @@
 #include "config.h"
 #include "secrets.h"
 
-// ESP32 WiFi
-#include <WiFi.h>
-
-//ESP8266 WiFi
-//#include <ESP8266WiFi.h>
-
 // Use WiFiClient class to create TCP connections and talk to hosts
 WiFiClient client;
 
 //Create SEN5x sensor instance
 SensirionI2CSen5x sen5x;
-//Simulate sensor operations, e.g. for testing
-#define SIMULATE_SENSOR
 
 // global variables
 
@@ -68,7 +60,7 @@ int rssi;
 #endif
 
 #ifdef THINGSPEAK
-  extern void post_thingspeak(avgPM25,pm25toAQI(MinPm25),pm25toAQI(MaxPm25),pm25toAQI(avgPM25));
+  extern void post_thingspeak(float pm25, float minaqi, float maxaqi, float aqi);
 #endif
 
 #ifdef INFLUX
@@ -89,21 +81,21 @@ int rssi;
 
 void setup() 
 {
-  // handle Serial first so debugMessage() works
-  #ifdef DEBUG
-    Serial.begin(115200);
-    // wait for serial port connection
-    while (!Serial);
+  // handle Serial first so status messages and debugMessage() work
+  Serial.begin(115200);
+  // wait for serial port connection
+  // while (!Serial);  // FIX: Infinite loop if no serial connection
+  delay(5000);   // Workaround to give Serial port a chance to open
+  
+  // Enable LED for visual confirmation of reporting (and turn it off)
+  pinMode(LED_BUILTIN,OUTPUT);
+  digitalWrite(LED_BUILTIN, LED_BUILTIN_OFF);    // turn the LED
 
-    // Enable LED for visual confirmation of reporting
-    pinMode(LED_BUILTIN,OUTPUT);
-
-    // Display key configuration parameters
-    debugMessage("PM2.5 monitor started");
-    debugMessage(String("Sample interval is ") + SAMPLE_INTERVAL + " seconds");
-    debugMessage(String("Report interval is ") + REPORT_INTERVAL + " minutes");
-    debugMessage(String("Internet service reconnect delay is ") + CONNECT_ATTEMPT_INTERVAL + " seconds");
-  #endif
+  // Display key configuration parameters
+  Serial.println("PM2.5 monitor started");
+  Serial.println(String("Sample interval is ") + SAMPLE_INTERVAL + " seconds");
+  Serial.println(String("Report interval is ") + REPORT_INTERVAL + " minutes");
+  Serial.println(String("Internet service reconnect delay is ") + CONNECT_ATTEMPT_INTERVAL + " seconds");
 
   // handle error condition
   initSensor();
@@ -111,8 +103,11 @@ void setup()
   // Remember current clock time
   prevReportMs = prevSampleMs = millis();
 
-  if(networkConnect())
+  if(networkConnect()) {
     internetAvailable = true;
+  }
+
+  debugMessage("----- Sampling -----");
 }
 
 void loop()
@@ -135,15 +130,16 @@ void loop()
       humidityTotal += sensorData.ambientHumidity;
       vocTotal += sensorData.vocIndex;
 
-      debugMessage(String("PM2.5 reading is ") + sensorData.massConcentrationPm2p5 + " or AQI " + pm25toAQI(sensorData.massConcentrationPm2p5));
-      debugMessage(String("Temp is ") + sensorData.ambientTemperature + " F");
-      debugMessage(String("Humidity is ") + sensorData.ambientHumidity + "%");
-      debugMessage(String("VOC level is ") + sensorData.vocIndex);
-      debugMessage(String("Sample count is ") + numSamples);
-      debugMessage(String("Running PM25 total for this sample period is ") + pm25Total);
-      debugMessage(String("Running tempF total for this sample period is ") + tempFTotal);
-      debugMessage(String("Running humidity total for this sample period is ") + humidityTotal);
-      debugMessage(String("Running VOC index total for this sample period is ") + vocTotal);
+      Serial.print("Current Readings: ");
+      Serial.print(String("PM2.5: ") + sensorData.massConcentrationPm2p5 + " = AQI " + pm25toAQI(sensorData.massConcentrationPm2p5));
+      Serial.print(String(", Temp: ") + sensorData.ambientTemperature + " F");
+      Serial.print(String(", Humidity:  ") + sensorData.ambientHumidity + "%");
+      Serial.println(String(", VOC: ") + sensorData.vocIndex);
+      debugText(String("Sample #") + numSamples + String(", running totals: "),false);
+      debugText(String("PM25 total: ") + pm25Total,false);
+      debugText(String(", TempF total: ") + tempFTotal,false);
+      debugText(String(", Humidity total: ") + humidityTotal,false);
+      debugText(String(", VOC total: ") + vocTotal,true);
 
       // Save sample time
       prevSampleMs = currentMillis;
@@ -167,10 +163,13 @@ void loop()
       avgVOC = vocTotal / numSamples;
       avgHumidity = humidityTotal / numSamples;
 
-      debugMessage(String("Average PM2.5 reading for this ") + REPORT_INTERVAL + " minute report interval  is " + avgPM25 + " or AQI " + pm25toAQI(avgPM25));
-      debugMessage(String("Average temp reading for this ") + REPORT_INTERVAL + " minute report interval  is " + avgTempF);
-      debugMessage(String("Average humidity reading for this ") + REPORT_INTERVAL + " minute report interval  is " + avgHumidity);
-      debugMessage(String("Average VoC reading for this ") + REPORT_INTERVAL + " minute report interval  is " + avgVOC);
+      Serial.println("----- Reporting -----");
+      Serial.print(String("Reporting averages (") + REPORT_INTERVAL + String(" minute): "));
+
+      Serial.print(String("PM2.5: ") + avgPM25 + String(" = AQI ") + pm25toAQI(avgPM25));
+      Serial.print(String(", Temp: ") + avgTempF + String(" F"));
+      Serial.print(String(", Humidity: ") + avgHumidity + String("%"));
+      Serial.println(String(", VoC: ") + avgVOC);
 
       // reconnect to WiFi if needed
       if (WiFi.status() != WL_CONNECTED){
@@ -178,11 +177,8 @@ void loop()
           WiFi.reconnect();
       }
 
-      // Blink the LED
-      digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
-      delay(500);                // wait for a half second
-      digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
-      delay(500);
+      // Visual indication we're updating remote/internet services
+      blink_led();
 
       /* Post both the current readings and historical max/min readings to the internet */
       #ifdef DWEET
@@ -206,6 +202,7 @@ void loop()
           debugMessage("Did not write environment data to MQTT broker");
       #endif
 
+      debugMessage("----- Sampling -----");
       // Reset counters and accumulators
       prevReportMs = currentMillis;
       numSamples = 0;
@@ -318,14 +315,14 @@ bool readSensor()
 
   // If we're simulating the sensor generate some reasonable values for measurements
   #ifdef SIMULATE_SENSOR
-    sensorData.massConcentrationPm1p0 = 1.0;
-    sensorData.massConcentrationPm2p5 = 2.5;
-    sensorData.massConcentrationPm4p0 = 4.0;
-    sensorData.massConcentrationPm10p0 = 10.0;
-    sensorData.ambientHumidity = 56.7;
-    sensorData.ambientTemperature = 20.0;
-    sensorData.vocIndex = 27.0;
-    sensorData.noxIndex = 5.0;
+    sensorData.massConcentrationPm1p0 = random(0,360)/10.0;
+    sensorData.massConcentrationPm2p5 = random(0,360)/10.0;
+    sensorData.massConcentrationPm4p0 = random(0,720)/10.0;
+    sensorData.massConcentrationPm10p0 = random(0,1550)/10.0;
+    sensorData.ambientHumidity = 30.0 + (random(0,250)/10.0);
+    sensorData.ambientTemperature = 15.0 + (random(0,101)/10.0);
+    sensorData.vocIndex = random(0,3500)/10.0;
+    sensorData.noxIndex = random(0,2500)/10.0;
     return true;
   #endif
 
@@ -367,4 +364,27 @@ void debugMessage(String messageText)
     Serial.println(messageText);
     Serial.flush();  // Make sure the message gets output (before any sleeping...)
   #endif
+}
+
+// Output debug text to Serial, allows optional newline after the text
+void debugText(String outputText,bool newline)
+{
+  #ifdef DEBUG
+    if(newline) {
+      Serial.println(outputText);
+      Serial.flush();
+    }
+    else {
+      Serial.print(outputText);
+    }
+  #endif
+}
+
+void blink_led()
+{
+      // Blink the LED
+      digitalWrite(LED_BUILTIN, LED_BUILTIN_ON);   // turn the LED on
+      delay(500);                // wait for a half second
+      digitalWrite(LED_BUILTIN, LED_BUILTIN_OFF);    // turn the LED
+      delay(500);
 }
