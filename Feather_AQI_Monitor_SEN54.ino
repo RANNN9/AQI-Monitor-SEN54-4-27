@@ -17,6 +17,13 @@ WiFiClient client;
 //Create SEN5x sensor instance
 SensirionI2CSen5x sen5x;
 
+#ifdef SCREEN
+  #include "Adafruit_LiquidCrystal.h"
+
+  // Connect via i2c, default address #0 (A0-A2 not jumpered)
+  Adafruit_LiquidCrystal lcd(0);
+#endif
+
 // global variables
 
 // PM sensor data
@@ -51,8 +58,7 @@ unsigned int numReports = 0;      // Number of capture intervals observed
 float MinPm25 = 1999;   /* Observed minimum PM2.5 */
 float MaxPm25 = -99;   /* Observed maximum PM2.5 */
 
-bool internetAvailable = false;
-int rssi;
+int rssi = 0; // WiFi RSSI value
 
 // External function dependencies
 #ifdef DWEET
@@ -84,8 +90,7 @@ void setup()
   // handle Serial first so status messages and debugMessage() work
   Serial.begin(115200);
   // wait for serial port connection
-  // while (!Serial);  // FIX: Infinite loop if no serial connection
-  delay(5000);   // Workaround to give Serial port a chance to open
+  while (!Serial);  // FIX: Infinite loop if no serial connection
   
   // Enable LED for visual confirmation of reporting (and turn it off)
   pinMode(LED_BUILTIN,OUTPUT);
@@ -97,15 +102,22 @@ void setup()
   Serial.println(String("Report interval is ") + REPORT_INTERVAL + " minutes");
   Serial.println(String("Internet service reconnect delay is ") + CONNECT_ATTEMPT_INTERVAL + " seconds");
 
+  #ifdef SCREEN
+   // set up the LCD's number of rows and columns:
+    if (!lcd.begin(20, 4)) {
+      debugMessage("Could not initialize i2c LCD backpack");
+      while(1);
+    }
+    debugMessage("Initialized LCD screen");
+  #endif
+
   // handle error condition
   initSensor();
 
   // Remember current clock time
   prevReportMs = prevSampleMs = millis();
 
-  if(networkConnect()) {
-    internetAvailable = true;
-  }
+  networkConnect();
 
   debugMessage("----- Sampling -----");
 }
@@ -141,6 +153,17 @@ void loop()
       debugText(String(", Humidity total: ") + humidityTotal,false);
       debugText(String(", VOC total: ") + vocTotal,true);
 
+      #ifdef SCREEN
+        lcd.setCursor(0,0);
+        lcd.print(String("PM2.5: ") + sensorData.massConcentrationPm2p5);
+        lcd.setCursor(0,1);
+        lcd.print(String("Temp: ") + sensorData.ambientTemperature + " F");
+        lcd.setCursor(0,2);
+        lcd.print(String("Humidity:  ") + sensorData.ambientHumidity + "%");
+        lcd.setCursor(0,3);
+        lcd.print(String("VOC: ") + sensorData.vocIndex);
+      #endif
+
       // Save sample time
       prevSampleMs = currentMillis;
     }
@@ -153,7 +176,7 @@ void loop()
   // is it time to report averaged values
   if((currentMillis - prevReportMs) >= (REPORT_INTERVAL * 60 *1000)) // converting REPORT_INTERVAL into milliseconds
   {
-    if (numSamples != 0) 
+    if ((numSamples != 0) && (WiFi.status() == WL_CONNECTED))
     {
       avgPM25 = pm25Total / numSamples;
       if(avgPM25 > MaxPm25) MaxPm25 = avgPM25;

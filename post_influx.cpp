@@ -18,9 +18,6 @@
   // Shared helper function
   extern void debugMessage(String messageText);
 
-  // Status variables shared across various functions
-  extern bool internetAvailable;
-
   #include <InfluxDbClient.h>
 
   // InfluxDB setup.  See config.h and secrets.h for site-specific settings.  Both InfluxDB v1.X
@@ -48,7 +45,7 @@
     Point dbenvdata(INFLUX_ENV_MEASUREMENT);
     Point dbdevdata(INFLUX_DEV_MEASUREMENT);
 
-    if (internetAvailable)
+    if (rssi!=0)
     {
       #ifdef INFLUX_V1
         // Set InfluxDB v1.X authentication params using values defined in secrets.h.  Not needed as such

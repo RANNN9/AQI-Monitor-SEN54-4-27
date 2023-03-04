@@ -21,11 +21,12 @@
 
 // Step 1: Set conditional compile flags
 #define DEBUG     // Output to serial port
-#define MQTT        // log sensor data to MQTT broker
+// #define MQTT        // log sensor data to MQTT broker
 //#define HASSIO_MQTT  // And, if MQTT enabled, with Home Assistant too?
-#define INFLUX      // Log data to InfluxDB server
+// #define INFLUX      // Log data to InfluxDB server
 // #define DWEET       // Log data to Dweet service
 // #define THINGSPEAK  // Log data to ThingSpeak
+#define SCREEN
 
 // Simulate SEN5x sensor operations, e.g. for testing or easier development.  Returns random
 // but plausible values for sensor readings.

@@ -22,9 +22,6 @@
     extern void hassio_mqtt_publish(float pm25, float aqi, float tempF, float vocIndex, float humidity);
   #endif
 
-  // Status variables shared across various functions
-  extern bool internetAvailable;
-
   // MQTT setup
   #include <Adafruit_MQTT.h>
   #include <Adafruit_MQTT_Client.h>
@@ -73,7 +70,7 @@
   bool mqttDeviceWiFiUpdate(int rssi)
   {
     bool result = false;
-    if (internetAvailable)
+    if (rssi!=0)
     {
       // Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_RSSI, MQTT_QOS_1); // if problematic, remove QOS parameter
       Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_RSSI);
@@ -98,73 +95,70 @@
   // Publishes sensor data to MQTT broker
   {
     bool result = false;
-    if (internetAvailable)
+
+    // add ,MQTT_QOS_1); if problematic, remove QOS parameter
+    Adafruit_MQTT_Publish tempfPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TEMPF);
+    Adafruit_MQTT_Publish humidityPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_HUMIDITY);
+    Adafruit_MQTT_Publish vocPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_VOC);
+    Adafruit_MQTT_Publish pm25Pub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_PM25);
+    Adafruit_MQTT_Publish aqiPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_AQI);
+
+    mqttConnect();
+
+    // Attempt to publish sensor data
+    if(pm25Pub.publish(pm25))
     {
-      // add ,MQTT_QOS_1); if problematic, remove QOS parameter
-      Adafruit_MQTT_Publish tempfPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TEMPF);
-      Adafruit_MQTT_Publish humidityPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_HUMIDITY);
-      Adafruit_MQTT_Publish vocPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_VOC);
-      Adafruit_MQTT_Publish pm25Pub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_PM25);
-      Adafruit_MQTT_Publish aqiPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_AQI);
-
-      mqttConnect();
-
-      // Attempt to publish sensor data
-      if(pm25Pub.publish(pm25))
-      {
-        debugMessage("MQTT publish: PM2.5 succeeded");
-        debugMessage(MQTT_PUB_PM25);
-        result = true;
-      }
-      else {
-        debugMessage("MQTT publish: PM2.5 failed");
-      }
-      
-      if(aqiPub.publish(aqi))
-      {
-        debugMessage("MQTT publish: AQI succeeded");
-        result = true;
-      }
-      else {
-        debugMessage("MQTT publish: AQI failed");
-        result = false;
-      }
-
-      if(vocPub.publish(vocIndex))
-      {
-        debugMessage("MQTT publish: VOC index succeeded");
-        result = true;
-      }
-      else {
-        debugMessage("MQTT publish: VOC index failed");
-      }
-
-      if(tempfPub.publish(tempF))
-      {
-        debugMessage("MQTT publish: Temperature succeeded");
-        result = true;
-      }
-      else {
-        debugMessage("MQTT publish: Temperature failed");
-      }
-
-      if(humidityPub.publish(humidity))
-      {
-        debugMessage("MQTT publish: Humidity succeeded");
-        result = true;
-      }
-      else {
-        debugMessage("MQTT publish: Humidity failed");
-      }
-
-      #ifdef HASSIO_MQTT
-        // Either configure sensors in Home Assistant's configuration.yaml file
-        // directly or attempt to do it via MQTT auto-discovery
-        // hassio_mqtt_setup();  // Config for MQTT auto-discovery
-        hassio_mqtt_publish(pm25,aqi,tempF,vocIndex,humidity);
-      #endif
-      //pm25_mqtt.disconnect();
+      debugMessage("MQTT publish: PM2.5 succeeded");
+      debugMessage(MQTT_PUB_PM25);
+      result = true;
     }
+    else {
+      debugMessage("MQTT publish: PM2.5 failed");
+    }
+    
+    if(aqiPub.publish(aqi))
+    {
+      debugMessage("MQTT publish: AQI succeeded");
+      result = true;
+    }
+    else {
+      debugMessage("MQTT publish: AQI failed");
+      result = false;
+    }
+
+    if(vocPub.publish(vocIndex))
+    {
+      debugMessage("MQTT publish: VOC index succeeded");
+      result = true;
+    }
+    else {
+      debugMessage("MQTT publish: VOC index failed");
+    }
+
+    if(tempfPub.publish(tempF))
+    {
+      debugMessage("MQTT publish: Temperature succeeded");
+      result = true;
+    }
+    else {
+      debugMessage("MQTT publish: Temperature failed");
+    }
+
+    if(humidityPub.publish(humidity))
+    {
+      debugMessage("MQTT publish: Humidity succeeded");
+      result = true;
+    }
+    else {
+      debugMessage("MQTT publish: Humidity failed");
+    }
+
+    #ifdef HASSIO_MQTT
+      // Either configure sensors in Home Assistant's configuration.yaml file
+      // directly or attempt to do it via MQTT auto-discovery
+      // hassio_mqtt_setup();  // Config for MQTT auto-discovery
+      hassio_mqtt_publish(pm25,aqi,tempF,vocIndex,humidity);
+    #endif
     return(result);
   }
 #endif
