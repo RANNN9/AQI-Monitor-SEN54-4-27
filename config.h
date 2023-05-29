@@ -5,28 +5,18 @@
   See README.md for target information and revision history
 */
 
-// Choose the right WiFi package, either ESP32 or ESP8266.  Provides access
-// to the WiFiClient object class and accessor.  May not be needed for all
-// network service access where service-specific libraries encapsulate it.
+// Configuration Step 1: Set debug message output
+// comment out to turn off; 1 = summary, 2 = verbose
+#define DEBUG 2
 
-// ESP32 WiFi
-//#include <WiFi.h>
-
-// ESP8266 WiFi
-#include <ESP8266WiFi.h>
-
-// When is the onboard LED (LED_BUILTIN) on?  
-#define LED_BUILTIN_ON    LOW
-#define LED_BUILTIN_OFF   HIGH
-
-// Step 1: Set conditional compile flags
-#define DEBUG     // Output to serial port
-// #define MQTT        // log sensor data to MQTT broker
-//#define HASSIO_MQTT  // And, if MQTT enabled, with Home Assistant too?
-// #define INFLUX      // Log data to InfluxDB server
+// Configuration Step 2: Set network data endpoints
+// #define MQTT     // log sensor data to MQTT broker
+// #define HASSIO_MQTT  // And, if MQTT enabled, with Home Assistant too?
+// #define INFLUX // Log data to InfluxDB server
 // #define DWEET       // Log data to Dweet service
 // #define THINGSPEAK  // Log data to ThingSpeak
-#define SCREEN
+
+// Configuration Step 3: Select environment sensor read intervals
 
 // Simulate SEN5x sensor operations, e.g. for testing or easier development.  Returns random
 // but plausible values for sensor readings.
@@ -43,15 +33,30 @@
   #define REPORT_INTERVAL 15 // Interval at which samples are averaged & reported in minutes)
 #endif
 
-// To allow for varying network singal strength and responsiveness, make multiple
-// attempts to connect to internet services at a measured interval.  If your environment
-// is more challenged you may want to allow for more connection attempts and/or a longer
-// delay between connection attempts.
-const int CONNECT_ATTEMPT_LIMIT = 3;      // max connection attempts to internet services
-const int CONNECT_ATTEMPT_INTERVAL = 5;  // seconds between internet service connect attempts
+// Configuration Step 4: Set screen parameters, if desired
+#define  SCREEN    // use screen as output
+
+// Pin config for e-paper display
+#ifdef SCREEN
+  #define EPD_CS      9
+  #define EPD_DC      10     
+  #define SRAM_CS     6  // can set to -1 to not use a pin (uses a lot of RAM!)
+  // on Featherwing EPD_RESET and EPD_BUSY must be set to -1 as these lines are not connected
+  #define EPD_RESET   -1
+  #define EPD_BUSY    -1
+  // #define EPD_RESET   8 // can set to -1 and share with microcontroller Reset!
+  // #define EPD_BUSY    7 // can set to -1 to not use a pin (will wait a fixed delay)
+
+  // rotation 1 orients the display so the wiring is at the top
+  // rotation of 3 flips it so the wiring is at the bottom
+  #define DISPLAY_ROTATION 3
+#endif
+
+// Configuration Step 5: Set network data endpoint parameters, if applicable
 
 // set client ID; used by mqtt and wifi
-#define CLIENT_ID "PM25"
+// structure is PM25_room-name; e.g. PM_kitchen
+#define CLIENT_ID "PM25-demo"
 
 #ifdef MQTT
   // Define MQTT topics used to publish sensor readings and device attributes.
@@ -88,7 +93,7 @@ const int CONNECT_ATTEMPT_INTERVAL = 5;  // seconds between internet service con
 
   // Tag data reported to InfluxDB to facilitate retrieval by query later
   // NAME for this device, should be unique
-  #define DEVICE_NAME "pm25-test"
+  #define DEVICE_NAME "pm25-demo"
 
   // TYPE conveys the kind or class of device.  A location may have multiple devices of a
   // particular type, so name would be unique but type would not.
@@ -96,7 +101,7 @@ const int CONNECT_ATTEMPT_INTERVAL = 5;  // seconds between internet service con
 
   // Where is the device located?  Generally would the name of a room in a house or
   // building, e.g. "kitchen", "cellar", "workshop", etc.
-  #define DEVICE_LOCATION "PM25-test"
+  #define DEVICE_LOCATION "PM25-demo"
 
   // SITE is typically indoor/outdoor or similar aspect apart from device LOCATION.
   // Can help group devices in ways that go beyond room/location.
@@ -111,3 +116,16 @@ const int CONNECT_ATTEMPT_INTERVAL = 5;  // seconds between internet service con
   #define DWEET_HOST "dweet.io"   // Typically dweet.io
   #define DWEET_DEVICE "makerhour-airquality"  // Must be unique across all of dweet.io
 #endif
+
+// Configuration variables that are less likely to require changes
+
+// To allow for varying network singal strength and responsiveness, make multiple
+// attempts to connect to internet services at a measured interval.  If your environment
+// is more challenged you may want to allow for more connection attempts and/or a longer
+// delay between connection attempts.
+#define CONNECT_ATTEMPT_LIMIT 3     // max connection attempts to internet services
+#define CONNECT_ATTEMPT_INTERVAL 10 // seconds between internet service connect attempts
+
+// Sleep time in seconds if hardware error occurs
+#define HARDWARE_ERROR_INTERVAL 10
+

@@ -16,7 +16,7 @@
 #ifdef MQTT
 
   // Shared helper function
-  extern void debugMessage(String messageText);
+  extern void debugMessage(String messageText, int messageLevel);
 
   #ifdef HASSIO_MQTT
     extern void hassio_mqtt_publish(float pm25, float aqi, float tempF, float vocIndex, float humidity);
@@ -33,7 +33,7 @@
     // exit if already connected
     if (pm25_mqtt.connected())
     {
-      debugMessage(String("Already connected to MQTT broker ") + MQTT_BROKER);
+      debugMessage(String("Already connected to MQTT broker ") + MQTT_BROKER,1);
       return;
     }
     
@@ -61,7 +61,7 @@
         //   default: debugMessage("Adafruit MQTT: GENERIC - Connection failed"); break;
         // }
       pm25_mqtt.disconnect();
-      debugMessage(String("MQTT connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " failed with error msg: " + pm25_mqtt.connectErrorString(mqttErr));
+      debugMessage(String("MQTT connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " failed with error msg: " + pm25_mqtt.connectErrorString(mqttErr),1);
       delay(CONNECT_ATTEMPT_INTERVAL*1000);
       // }
     }
@@ -79,12 +79,12 @@
 
       if (rssiLevelPub.publish(rssi))
       {
-        debugMessage("MQTT publish: WiFi RSSI succeeded");
+        debugMessage("MQTT publish: WiFi RSSI succeeded",1);
         result = true;
       }
       else
       {
-        debugMessage("MQTT publish: WiFi RSSI failed");
+        debugMessage("MQTT publish: WiFi RSSI failed",1);
       }
       //pm25_mqtt.disconnect();
     }
@@ -108,49 +108,49 @@
     // Attempt to publish sensor data
     if(pm25Pub.publish(pm25))
     {
-      debugMessage("MQTT publish: PM2.5 succeeded");
+      debugMessage("MQTT publish: PM2.5 succeeded",1);
       debugMessage(MQTT_PUB_PM25);
       result = true;
     }
     else {
-      debugMessage("MQTT publish: PM2.5 failed");
+      debugMessage("MQTT publish: PM2.5 failed",1);
     }
     
     if(aqiPub.publish(aqi))
     {
-      debugMessage("MQTT publish: AQI succeeded");
+      debugMessage("MQTT publish: AQI succeeded",1);
       result = true;
     }
     else {
-      debugMessage("MQTT publish: AQI failed");
+      debugMessage("MQTT publish: AQI failed",1);
       result = false;
     }
 
     if(vocPub.publish(vocIndex))
     {
-      debugMessage("MQTT publish: VOC index succeeded");
+      debugMessage("MQTT publish: VOC index succeeded",1);
       result = true;
     }
     else {
-      debugMessage("MQTT publish: VOC index failed");
+      debugMessage("MQTT publish: VOC index failed",1);
     }
 
     if(tempfPub.publish(tempF))
     {
-      debugMessage("MQTT publish: Temperature succeeded");
+      debugMessage("MQTT publish: Temperature succeeded",1);
       result = true;
     }
     else {
-      debugMessage("MQTT publish: Temperature failed");
+      debugMessage("MQTT publish: Temperature failed",1);
     }
 
     if(humidityPub.publish(humidity))
     {
-      debugMessage("MQTT publish: Humidity succeeded");
+      debugMessage("MQTT publish: Humidity succeeded",1);
       result = true;
     }
     else {
-      debugMessage("MQTT publish: Humidity failed");
+      debugMessage("MQTT publish: Humidity failed",1);
     }
 
     #ifdef HASSIO_MQTT
