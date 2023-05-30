@@ -7,7 +7,7 @@
 
 // Configuration Step 1: Set debug message output
 // comment out to turn off; 1 = summary, 2 = verbose
-#define DEBUG 2
+// #define DEBUG 1
 
 // Configuration Step 2: Set network data endpoints
 // #define MQTT     // log sensor data to MQTT broker
@@ -38,17 +38,13 @@
 
 // Pin config for e-paper display
 #ifdef SCREEN
-  #define EPD_CS      9
-  #define EPD_DC      10     
-  #define SRAM_CS     6  // can set to -1 to not use a pin (uses a lot of RAM!)
-  // on Featherwing EPD_RESET and EPD_BUSY must be set to -1 as these lines are not connected
-  #define EPD_RESET   -1
-  #define EPD_BUSY    -1
-  // #define EPD_RESET   8 // can set to -1 and share with microcontroller Reset!
-  // #define EPD_BUSY    7 // can set to -1 to not use a pin (will wait a fixed delay)
+  #define TFT_CS         16
+  #define TFT_RST        15                                            
+  #define TFT_DC         0
 
-  // rotation 1 orients the display so the wiring is at the top
-  // rotation of 3 flips it so the wiring is at the bottom
+  // rotation 1 orients the display so the pins are at the bottom of the display
+  // rotation 2 orients the display so the pins are at the top of the display
+  // rotation of 3 flips it so the wiring is on the left side of the display
   #define DISPLAY_ROTATION 3
 #endif
 

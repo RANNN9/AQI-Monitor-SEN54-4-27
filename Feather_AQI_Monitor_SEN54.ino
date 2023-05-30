@@ -24,29 +24,30 @@ SensirionI2CSen5x sen5x;
 #endif
 
 #ifdef SCREEN
-#include <Adafruit_ThinkInk.h>
+  #include <Adafruit_ThinkInk.h>
 
-#include <Fonts/FreeSans9pt7b.h>
-#include <Fonts/FreeSans12pt7b.h>
-#include <Fonts/FreeSans18pt7b.h>
+  #include <Fonts/FreeSans9pt7b.h>
+  #include <Fonts/FreeSans12pt7b.h>
+  #include <Fonts/FreeSans18pt7b.h>
 
-// 2.96" greyscale display with 196x128 pixels
-// colors are EPD_WHITE, EPD_BLACK, EPD_RED, EPD_GRAY, EPD_LIGHT, EPD_DARK
-ThinkInk_290_Grayscale4_T5 display(EPD_DC, EPD_RESET, EPD_CS, SRAM_CS, EPD_BUSY);
+  // 1.8" TFT display with 128x160 pixels
+  #include <Adafruit_GFX.h>    // Core graphics library
+  #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
+  Adafruit_ST7735 display = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
-// screen layout assists
-const int xMargins = 5;
-const int xOutdoorMargin = ((display.width() / 2) + xMargins);
-const int yMargins = 2;
-// yCO2 not used
-const int yCO2 = 20;
-const int ySparkline = 40;
-const int yTemp = 100;
-// BUG, 7/8 = 112, WiFi status is 15 (5*3) pixels high
-const int yStatus = (display.height() * 7 / 8);
-const int sparklineHeight = 40;
-const int batteryBarWidth = 28;
-const int batteryBarHeight = 10;
+  // screen layout assists
+  const int xMargins = 5;
+  const int xOutdoorMargin = ((display.width() / 2) + xMargins);
+  const int yMargins = 2;
+  // yCO2 not used
+  const int yCO2 = 20;
+  const int ySparkline = 40;
+  const int yTemp = 100;
+  // BUG, 7/8 = 112, WiFi status is 15 (5*3) pixels high
+  const int yStatus = (display.height() * 7 / 8);
+  const int sparklineHeight = 40;
+  const int batteryBarWidth = 28;
+  const int batteryBarHeight = 10;
 #endif
 
 // global variables
@@ -87,30 +88,30 @@ int rssi = 0;  // WiFi RSSI value
 
 // External function dependencies
 #ifdef DWEET
-extern void post_dweet(float pm25, float minaqi, float maxaqi, float aqi, float tempF, float vocIndex, float humidity);
+  extern void post_dweet(float pm25, float minaqi, float maxaqi, float aqi, float tempF, float vocIndex, float humidity);
 #endif
 
 #ifdef THINGSPEAK
-extern void post_thingspeak(float pm25, float minaqi, float maxaqi, float aqi);
+  extern void post_thingspeak(float pm25, float minaqi, float maxaqi, float aqi);
 #endif
 
 #ifdef INFLUX
-extern bool post_influx(float pm25, float aqi, float tempF, float vocIndex, float humidity, int rssi);
+  extern bool post_influx(float pm25, float aqi, float tempF, float vocIndex, float humidity, int rssi);
 #endif
 
 #ifdef MQTT
-// MQTT uses WiFiClient class to create TCP connections
-WiFiClient client;
+  // MQTT uses WiFiClient class to create TCP connections
+  WiFiClient client;
 
-// MQTT interface depends on the underlying network client object, which is defined and
-// managed here (so needs to be defined here).
-#include <Adafruit_MQTT.h>
-#include <Adafruit_MQTT_Client.h>
-Adafruit_MQTT_Client pm25_mqtt(&client, MQTT_BROKER, MQTT_PORT, CLIENT_ID, MQTT_USER, MQTT_PASS);
+  // MQTT interface depends on the underlying network client object, which is defined and
+  // managed here (so needs to be defined here).
+  #include <Adafruit_MQTT.h>
+  #include <Adafruit_MQTT_Client.h>
+  Adafruit_MQTT_Client pm25_mqtt(&client, MQTT_BROKER, MQTT_PORT, CLIENT_ID, MQTT_USER, MQTT_PASS);
 
 // Adafruit PMSA003I
-extern bool mqttDeviceWiFiUpdate(int rssi);
-extern bool mqttSensorUpdate(float pm25, float aqi, float tempF, float vocIndex, float humidity);
+  extern bool mqttDeviceWiFiUpdate(int rssi);
+  extern bool mqttSensorUpdate(float pm25, float aqi, float tempF, float vocIndex, float humidity);
 #endif
 
 void setup() {
@@ -126,20 +127,20 @@ void setup() {
   debugMessage(String("Report interval is ") + REPORT_INTERVAL + " minutes", 2);
   debugMessage(String("Internet service reconnect delay is ") + CONNECT_ATTEMPT_INTERVAL + " seconds", 2);
 
-#ifdef SCREEN
-  // there is no way to query screen for status
-  display.begin(THINKINK_MONO);  // changed from THINKINK_GRAYSCALE4 to eliminate black screen border
-  debugMessage("Display ready", 1);
-#endif
-
   // Initialize environmental sensor
   if (!sensorInit()) {
     debugMessage("Environment sensor failed to initialize", 1);
     screenAlert("NO PM25 sensor");
     // This error often occurs right after a firmware flash and reset.
     // Hardware deep sleep typically resolves it, so quickly cycle the hardware
-    powerDisable(HARDWARE_ERROR_INTERVAL);
+    //powerDisable(HARDWARE_ERROR_INTERVAL);
   }
+
+#ifdef SCREEN
+    // Use this initializer if using a 1.8" TFT screen:
+  display.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
+  display.setRotation(DISPLAY_ROTATION);
+#endif
 
   // Remember current clock time
   prevReportMs = prevSampleMs = millis();
@@ -259,25 +260,25 @@ void screenPM() {
 #ifdef SCREEN
   debugMessage("Starting screenPM refresh", 1);
 
-  display.clearBuffer();
-  display.setTextColor(EPD_BLACK);
+  display.fillScreen(ST77XX_BLACK);
 
   // screen helper routines
   // -70 moves it to the left of the battery display
   screenHelperWiFiStatus((display.width() - xMargins - 70), (display.height() - yMargins), 3, 3, 5);
 
-  display.setFont(&FreeSans18pt7b);
-  display.setCursor(xMargins, yMargins);
+  display.setFont(&FreeSans9pt7b);
+  display.setTextColor(ST77XX_WHITE);
+  display.setCursor(xMargins, 20);
   display.print(String("PM2.5: ") + sensorData.massConcentrationPm2p5);
-  display.setCursor(xMargins, 30);
+  display.setCursor(xMargins, 50);
   display.print(String("Temp: ") + sensorData.ambientTemperature + " F");
-  display.setCursor(xMargins, 60);
+  display.setCursor(xMargins, 80);
   display.print(String("Humidity:  ") + sensorData.ambientHumidity + "%");
-  display.setCursor(xMargins, 90);
+  display.setCursor(xMargins, 110);
   display.print(String("VOC: ") + sensorData.vocIndex);
 
   //update display
-  display.display();
+  // display.display();
   debugMessage("screenPM refresh complete", 1);
 #endif
 }
@@ -285,14 +286,14 @@ void screenPM() {
 void screenAlert(String messageText)
 // Display critical error message on screen
 {
-  display.clearBuffer();
-  display.setTextColor(EPD_BLACK);
+  display.fillScreen(ST77XX_BLACK);
+  display.setTextColor(ST77XX_WHITE);
   display.setFont(&FreeSans12pt7b);
   display.setCursor(40, (display.height() / 2 + 6));
   display.print(messageText);
 
   //update display
-  display.display();
+  // display.display();
 }
 
 void screenHelperStatusMessage(int initialX, int initialY, String messageText)
@@ -482,47 +483,47 @@ void networkDisconnect()
   #endif
 }
 
-void powerDisable(int deepSleepTime)
-// Powers down hardware in preparation for board deep sleep
-{
-  #ifdef SCREEN
-    debugMessage("Starting power down activities",1);
-    // power down epd
-    display.powerDown();
-    digitalWrite(EPD_RESET, LOW);  // hardware power down mode
-    debugMessage("powered down epd",1);
-  #endif
+// void powerDisable(int deepSleepTime)
+// // Powers down hardware in preparation for board deep sleep
+// {
+//   #ifdef SCREEN
+//     // debugMessage("Starting power down activities",1);
+//     // // power down epd
+//     // display.powerDown();
+//     // digitalWrite(EPD_RESET, LOW);  // hardware power down mode
+//     // debugMessage("powered down epd",1);
+//   #endif
 
-  networkDisconnect();
+//   networkDisconnect();
 
-  // power down sensor
+//   // power down sensor
 
-  #if defined(ARDUINO_ADAFRUIT_FEATHER_ESP32_V2)
-    // Turn off the I2C power
-    pinMode(NEOPIXEL_I2C_POWER, OUTPUT);
-    digitalWrite(NEOPIXEL_I2C_POWER, LOW);
+//   #if defined(ARDUINO_ADAFRUIT_FEATHER_ESP32_V2)
+//     // Turn off the I2C power
+//     pinMode(NEOPIXEL_I2C_POWER, OUTPUT);
+//     digitalWrite(NEOPIXEL_I2C_POWER, LOW);
 
-    // if you need to turn the neopixel off
-    // pinMode(NEOPIXEL_POWER, OUTPUT);
-    // digitalWrite(NEOPIXEL_POWER, LOW);
-    debugMessage("disabled Adafruit Feather ESP32 V2 I2C power",1);
-  #endif
+//     // if you need to turn the neopixel off
+//     // pinMode(NEOPIXEL_POWER, OUTPUT);
+//     // digitalWrite(NEOPIXEL_POWER, LOW);
+//     debugMessage("disabled Adafruit Feather ESP32 V2 I2C power",1);
+//   #endif
 
-  #if defined(ARDUINO_ADAFRUIT_FEATHER_ESP32S2)
-    // Rev B board is LOW to enable
-    // Rev C board is HIGH to enable
-    digitalWrite(PIN_I2C_POWER, LOW);
+//   #if defined(ARDUINO_ADAFRUIT_FEATHER_ESP32S2)
+//     // Rev B board is LOW to enable
+//     // Rev C board is HIGH to enable
+//     digitalWrite(PIN_I2C_POWER, LOW);
 
-    // if you need to turn the neopixel off
-    // pinMode(NEOPIXEL_POWER, OUTPUT);
-    // digitalWrite(NEOPIXEL_POWER, LOW);
-    debugMessage("disabled Adafruit Feather ESP32S2 I2C power",1);
-  #endif
+//     // if you need to turn the neopixel off
+//     // pinMode(NEOPIXEL_POWER, OUTPUT);
+//     // digitalWrite(NEOPIXEL_POWER, LOW);
+//     debugMessage("disabled Adafruit Feather ESP32S2 I2C power",1);
+//   #endif
 
-  esp_sleep_enable_timer_wakeup(deepSleepTime*1000000); // ESP microsecond modifier
-  debugMessage(String("Going into ESP32 deep sleep for ") + (deepSleepTime) + " seconds",1);
-  esp_deep_sleep_start();
-}
+//   esp_sleep_enable_timer_wakeup(deepSleepTime*1000000); // ESP microsecond modifier
+//   debugMessage(String("Going into ESP32 deep sleep for ") + (deepSleepTime) + " seconds",1);
+//   esp_deep_sleep_start();
+// }
 
 void debugMessage(String messageText, int messageLevel)
 // wraps Serial.println as #define conditional
