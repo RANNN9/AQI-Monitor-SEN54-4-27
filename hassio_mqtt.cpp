@@ -67,7 +67,7 @@
         Adafruit_MQTT_Publish rco2StatePub = Adafruit_MQTT_Publish(&pm25_mqtt,MQTT_HASSIO_STATE);
 
         debugMessage(String("Publishing AQI values to Home Assistant via MQTT, topic: ") + MQTT_HASSIO_STATE,1);
-        doc["temperature"] = tempF;
+        doc["temperatureF"] = tempF;
         doc["humidity"] = humidity;
         doc["aqi"] = aqi;
         doc["pm25"] = pm25;

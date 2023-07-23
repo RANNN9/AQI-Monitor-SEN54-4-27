@@ -83,7 +83,7 @@
         // Report sensor readings
         dbenvdata.addField("pm25", pm25);
         dbenvdata.addField("aqi", aqi);
-        dbenvdata.addField("temperature", tempF);
+        dbenvdata.addField("temperatureF", tempF);
         dbenvdata.addField("vocIndex", vocIndex);
         dbenvdata.addField("humidity", humidity);
         // Write point via connection to InfluxDB host

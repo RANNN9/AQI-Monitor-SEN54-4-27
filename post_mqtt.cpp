@@ -47,19 +47,6 @@
         debugMessage(String("Connected to MQTT broker ") + MQTT_BROKER);
         return;
       }
-      // else
-      // {
-        // Adafruit IO connect errors
-        // switch (mqttErr)
-        // {
-        //   case 1: debugMessage("Adafruit MQTT: Wrong protocol"); break;
-        //   case 2: debugMessage("Adafruit MQTT: ID rejected"); break;
-        //   case 3: debugMessage("Adafruit MQTT: Server unavailable"); break;
-        //   case 4: debugMessage("Adafruit MQTT: Incorrect user or password"); break;
-        //   case 5: debugMessage("Adafruit MQTT: Not authorized"); break;
-        //   case 6: debugMessage("Adafruit MQTT: Failed to subscribe"); break;
-        //   default: debugMessage("Adafruit MQTT: GENERIC - Connection failed"); break;
-        // }
       pm25_mqtt.disconnect();
       debugMessage(String("MQTT connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " failed with error msg: " + pm25_mqtt.connectErrorString(mqttErr),1);
       delay(CONNECT_ATTEMPT_INTERVAL*1000);

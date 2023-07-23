@@ -16,38 +16,22 @@ SensirionI2CSen5x sen5x;
 
 // activate only if using network data endpoints
 #if defined(MQTT) || defined(INFLUX) || defined(HASSIO_MQTT)
-#if defined(ESP8266)
-#include <ESP8266WiFi.h>
-#elif defined(ESP32)
-#include <WiFi.h>
-#endif
+  #if defined(ESP8266)
+    #include <ESP8266WiFi.h>
+  #elif defined(ESP32)
+    #include <WiFi.h>
+  #endif
 #endif
 
 #ifdef SCREEN
-  #include <Adafruit_ThinkInk.h>
-
-  #include <Fonts/FreeSans9pt7b.h>
-  #include <Fonts/FreeSans12pt7b.h>
-  #include <Fonts/FreeSans18pt7b.h>
-
   // 1.8" TFT display with 128x160 pixels
   #include <Adafruit_GFX.h>    // Core graphics library
   #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
   Adafruit_ST7735 display = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
-  // screen layout assists
-  const int xMargins = 5;
-  const int xOutdoorMargin = ((display.width() / 2) + xMargins);
-  const int yMargins = 2;
-  // yCO2 not used
-  const int yCO2 = 20;
-  const int ySparkline = 40;
-  const int yTemp = 100;
-  // BUG, 7/8 = 112, WiFi status is 15 (5*3) pixels high
-  const int yStatus = (display.height() * 7 / 8);
-  const int sparklineHeight = 40;
-  const int batteryBarWidth = 28;
-  const int batteryBarHeight = 10;
+  #include <Fonts/FreeSans9pt7b.h>
+  #include <Fonts/FreeSans12pt7b.h>
+  #include <Fonts/FreeSans18pt7b.h>
 #endif
 
 // global variables
@@ -55,14 +39,14 @@ SensirionI2CSen5x sen5x;
 // PM sensor data
 typedef struct
 {
-  float massConcentrationPm1p0;
-  float massConcentrationPm2p5;
-  float massConcentrationPm10p0;
-  float massConcentrationPm4p0;
-  float ambientHumidity;
-  float ambientTemperature;
-  float vocIndex;
-  float noxIndex;  // Not supported by SEN54 (only SEN55)
+  float massConcentrationPm1p0;   // PM1.0 [µg/m³], NAN if unknown
+  float massConcentrationPm2p5;   // PM2.5 [µg/m³], NAN if unknown
+  float massConcentrationPm10p0;  // PM10.0 [µg/m³], NAN if unknown
+  float massConcentrationPm4p0;   // PM4.0 [µg/m³], NAN if unknown
+  float ambientHumidity;          // RH [%], NAN if unknown
+  float ambientTemperatureF;      // [°C], NAN in unknown
+  float vocIndex;                 // Sensiron VOC Index, NAN in unknown
+  float noxIndex;                 // NAN for unsupported devices (SEN54), also NAN for first 10-11 seconds
 } envData;
 envData sensorData;
 
@@ -136,11 +120,11 @@ void setup() {
     //powerDisable(HARDWARE_ERROR_INTERVAL);
   }
 
-#ifdef SCREEN
-    // Use this initializer if using a 1.8" TFT screen:
-  display.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
-  display.setRotation(DISPLAY_ROTATION);
-#endif
+  #ifdef SCREEN
+    display.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
+    display.setRotation(DISPLAY_ROTATION);
+    display.fillScreen(ST77XX_BLACK);
+  #endif
 
   // Remember current clock time
   prevReportMs = prevSampleMs = millis();
@@ -161,17 +145,17 @@ void loop()
       numSamples++;
 
       // convert temp from C to F
-      sensorData.ambientTemperature = 32.0 + (1.8 * sensorData.ambientTemperature);
+      sensorData.ambientTemperatureF = 32.0 + (1.8 * sensorData.ambientTemperatureF);
 
       // add to the running totals
       pm25Total += sensorData.massConcentrationPm2p5;
-      tempFTotal += sensorData.ambientTemperature;
+      tempFTotal += sensorData.ambientTemperatureF;
       humidityTotal += sensorData.ambientHumidity;
       vocTotal += sensorData.vocIndex;
 
       debugMessage("Current Readings: ",1);
       debugMessage(String("PM2.5: ") + sensorData.massConcentrationPm2p5 + " = AQI " + pm25toAQI(sensorData.massConcentrationPm2p5), 1);
-      debugMessage(String(", Temp: ") + sensorData.ambientTemperature + " F",1);
+      debugMessage(String(", Temperature: ") + sensorData.ambientTemperatureF + " F",1);
       debugMessage(String(", Humidity:  ") + sensorData.ambientHumidity + "%",1);
       debugMessage(String(", VOC: ") + sensorData.vocIndex,1);
       debugMessage(String("Sample #") + numSamples + String(", running totals: "),1);
@@ -180,10 +164,8 @@ void loop()
       debugMessage(String(", Humidity total: ") + humidityTotal,1);
       debugMessage(String(", VOC total: ") + vocTotal,1);
 
-      #ifdef SCREEN
-        screenPM();
-      #endif
-
+      screenPM();
+      
       // Save sample time
       prevSampleMs = currentMillis;
     } 
@@ -212,9 +194,9 @@ void loop()
         debugMessage("----- Reporting -----",1);
         debugMessage(String("Reporting averages (") + REPORT_INTERVAL + String(" minute): "),1);
         debugMessage(String("PM2.5: ") + avgPM25 + String(" = AQI ") + pm25toAQI(avgPM25),1);
-        debugMessage(String(", Temp: ") + avgTempF + String(" F"),1);
-        debugMessage(String(", Humidity: ") + avgHumidity + String("%"),1);
-        debugMessage(String(", VoC: ") + avgVOC,1);
+        debugMessage(String("Temp: ") + avgTempF + String(" F"),1);
+        debugMessage(String("Humidity: ") + avgHumidity + String("%"),1);
+        debugMessage(String("VoC: ") + avgVOC,1);
 
         if (networkConnect())
         {
@@ -250,35 +232,75 @@ void loop()
       }
     }
   #endif
-  else 
-  {
-    debugMessage("No samples to average and report on",2);
-  }
 }
 
 void screenPM() {
 #ifdef SCREEN
   debugMessage("Starting screenPM refresh", 1);
 
-  display.fillScreen(ST77XX_BLACK);
+  // testing removal because the repaint order removes artifacts
+  // display.fillScreen(ST77XX_BLACK);
 
   // screen helper routines
-  // -70 moves it to the left of the battery display
-  screenHelperWiFiStatus((display.width() - xMargins - 70), (display.height() - yMargins), 3, 3, 5);
+  screenHelperWiFiStatus((display.width() - xMargins - ((5*wifiBarWidth)+(5*wifiBarSpacing))), (yMargins + (5*wifiBarHeightIncrement)), wifiBarWidth, wifiBarHeightIncrement, wifiBarSpacing);
 
+  // temperature and humidity
   display.setFont(&FreeSans9pt7b);
   display.setTextColor(ST77XX_WHITE);
-  display.setCursor(xMargins, 20);
-  display.print(String("PM2.5: ") + sensorData.massConcentrationPm2p5);
-  display.setCursor(xMargins, 50);
-  display.print(String("Temp: ") + sensorData.ambientTemperature + " F");
-  display.setCursor(xMargins, 80);
-  display.print(String("Humidity:  ") + sensorData.ambientHumidity + "%");
-  display.setCursor(xMargins, 110);
-  display.print(String("VOC: ") + sensorData.vocIndex);
+  display.setCursor(xMargins, yTemperature);
+  display.print(String(sensorData.ambientTemperatureF) + "F ");
+  if ((sensorData.ambientHumidity<40) || (sensorData.ambientHumidity>60))
+    display.setTextColor(ST7735_RED);
+  else
+    display.setTextColor(ST7735_GREEN);
+  display.print(String(sensorData.ambientHumidity) + "%");
+  // pm25 levels
+  switch (int(sensorData.massConcentrationPm2p5/50))
+  {
+    case 0: // good
+      display.fillCircle(40,76,35,ST77XX_GREEN);
+      break;
+    case 1: // moderate
+      display.fillCircle(40,76,35,ST77XX_YELLOW);
+      break;
+    case 2: // unhealthy for sensitive groups
+      display.fillCircle(40,76,35,ST77XX_ORANGE);
+      break;
+    case 4: // unhealthy
+      display.fillCircle(40,76,35,ST77XX_RED);
+      break;
+    case 5: // very unhealthy
+      display.fillCircle(40,76,35,ST77XX_GREEN);
+      break;
+    case 6: // very unhealthy
+      display.fillCircle(40,76,35,ST77XX_BLUE);
+      break;
+    default: // >6 is hazardous
+      display.fillCircle(40,76,35,ST77XX_MAGENTA);
+      break;
+  }
+  display.setTextColor(ST77XX_WHITE);
+  display.setCursor(40,56);
+  display.print("PM2.5");
+  display.setCursor(40,76);
+  display.print(int(sensorData.massConcentrationPm2p5));
+  // voc levels
 
-  //update display
-  // display.display();
+  // legend boxes
+  display.fillRect(xMargins,yLegend,legendWidth,legendHeight,ST77XX_GREEN);
+  display.fillRect(xMargins+legendWidth,yLegend,legendWidth,legendHeight,ST77XX_YELLOW);
+  display.fillRect((xMargins+(2*legendWidth)),yLegend,legendWidth,legendHeight,ST77XX_ORANGE);
+  display.fillRect((xMargins+(3*legendWidth)),yLegend,legendWidth,legendHeight,ST77XX_RED);
+  display.fillRect((xMargins+(4*legendWidth)),yLegend,legendWidth,legendHeight,ST7735_BLUE);
+  display.fillRect((xMargins+(5*legendWidth)),yLegend,legendWidth,legendHeight,ST77XX_MAGENTA);
+  
+  // legend labels
+  display.setFont(); // default system font
+  for (int i=0; i<6; i++)
+  {
+    display.setCursor((xMargins+(i*legendWidth)),yLegend+2);
+    display.print(airQualityLabel[i]);
+  }
   debugMessage("screenPM refresh complete", 1);
 #endif
 }
@@ -291,24 +313,9 @@ void screenAlert(String messageText)
   display.setFont(&FreeSans12pt7b);
   display.setCursor(40, (display.height() / 2 + 6));
   display.print(messageText);
-
-  //update display
-  // display.display();
 }
 
-void screenHelperStatusMessage(int initialX, int initialY, String messageText)
-// helper function for screenXXX() routines that draws a status message
-// uses system default font, so text drawn x+,y+ from initialX,Y
-{
-// IMPROVEMENT : Screen dimension boundary checks for function parameters
-#ifdef SCREEN
-  display.setFont();  // resets to system default monospace font (6x8 pixels)
-  display.setCursor(initialX, initialY);
-  display.print(messageText);
-#endif
-}
-
-void screenHelperWiFiStatus(int initialX, int initialY, int barWidth, int barHeightMultiplier, int barSpacingMultipler)
+void screenHelperWiFiStatus(int initialX, int initialY, int barWidth, int barHeightIncrement, int barSpacing)
 // helper function for screenXXX() routines that draws WiFi signal strength
 {
 #ifdef SCREEN
@@ -320,7 +327,7 @@ void screenHelperWiFiStatus(int initialX, int initialY, int barWidth, int barHei
       // <50 rssi value = 5 bars, each +10 rssi value range = one less bar
       // draw bars to represent WiFi strength
       for (int b = 1; b <= barCount; b++) {
-        display.fillRect((initialX + (b * barSpacingMultipler)), (initialY - (b * barHeightMultiplier)), barWidth, b * barHeightMultiplier, EPD_BLACK);
+        display.fillRect((initialX + (b * barSpacing)), (initialY - (b * barHeightIncrement)), barWidth, b * barHeightIncrement, ST77XX_WHITE);
       }
       debugMessage(String("WiFi signal strength on screen as ") + barCount + " bars", 2);
     } else {
@@ -332,6 +339,13 @@ void screenHelperWiFiStatus(int initialX, int initialY, int barWidth, int barHei
 }
 
 bool networkConnect() {
+  #ifdef SIMULATE_SENSOR
+    // IMPROVEMENT : Could simulate IP address
+    // testing range is 30 to 90 (no signal)
+    rssi  = random(30, 90);
+    return true;
+  #endif
+
 // Run only if using network data endpoints
 #if defined(MQTT) || defined(INFLUX) || defined(HASSIO_MQTT)
 
@@ -364,23 +378,23 @@ bool networkConnect() {
 }
 
 bool sensorInit() {
+  // If we're simulating the sensor there's nothing to init & we're good to go
+  #ifdef SIMULATE_SENSOR
+    return true;
+  #endif
+
+  // Handle two ESP32 I2C ports
+  #if defined(ARDUINO_ADAFRUIT_QTPY_ESP32S2) || defined(ARDUINO_ADAFRUIT_QTPY_ESP32S3_NOPSRAM) || defined(ARDUINO_ADAFRUIT_QTPY_ESP32S3) || defined(ARDUINO_ADAFRUIT_QTPY_ESP32_PICO)
+    Wire1.begin();
+    sen5x.begin(Wire1);
+  #else
+    Wire.begin();
+    sen5x.begin(Wire);
+  #endif
+
   // SparkFun SEN5X
   uint16_t error;
   char errorMessage[256];
-
-// If we're simulating the sensor there's nothing to init & we're good to go
-#ifdef SIMULATE_SENSOR
-  return true;
-#endif
-
-// Handle two ESP32 I2C ports
-#if defined(ARDUINO_ADAFRUIT_QTPY_ESP32S2) || defined(ARDUINO_ADAFRUIT_QTPY_ESP32S3_NOPSRAM) || defined(ARDUINO_ADAFRUIT_QTPY_ESP32S3) || defined(ARDUINO_ADAFRUIT_QTPY_ESP32_PICO)
-  Wire1.begin();
-  sen5x.begin(Wire1);
-#else
-  Wire.begin();
-  sen5x.begin(Wire);
-#endif
 
   error = sen5x.deviceReset();
   if (error) {
@@ -427,26 +441,29 @@ bool sensorInit() {
 }
 
 bool readSensor() {
+  // If we're simulating the sensor generate some reasonable values for measurements
+  #ifdef SIMULATE_SENSOR
+    sensorData.massConcentrationPm1p0 = random(0, 360) / 10.0;
+    sensorData.massConcentrationPm2p5 = random(0, 360) / 10.0;
+    sensorData.massConcentrationPm4p0 = random(0, 720) / 10.0;
+    sensorData.massConcentrationPm10p0 = random(0, 1550) / 10.0;
+    // testing range is 5 to 95
+    sensorData.ambientHumidity = 5 + (random(0, 900) / 10.0);
+    // keep this value in C, not F. Converted after readSensor()
+    // testing range is 15 to 25
+    sensorData.ambientTemperatureF = 15.0 + (random(0, 101) / 10.0);
+    sensorData.vocIndex = random(0, 3500) / 10.0;
+    sensorData.noxIndex = random(0, 2500) / 10.0;
+    return true;
+  #endif
+
   // SparkFun SEN5X
   uint16_t error;
   char errorMessage[256];
 
-// If we're simulating the sensor generate some reasonable values for measurements
-#ifdef SIMULATE_SENSOR
-  sensorData.massConcentrationPm1p0 = random(0, 360) / 10.0;
-  sensorData.massConcentrationPm2p5 = random(0, 360) / 10.0;
-  sensorData.massConcentrationPm4p0 = random(0, 720) / 10.0;
-  sensorData.massConcentrationPm10p0 = random(0, 1550) / 10.0;
-  sensorData.ambientHumidity = 30.0 + (random(0, 250) / 10.0);
-  sensorData.ambientTemperature = 15.0 + (random(0, 101) / 10.0);
-  sensorData.vocIndex = random(0, 3500) / 10.0;
-  sensorData.noxIndex = random(0, 2500) / 10.0;
-  return true;
-#endif
-
   error = sen5x.readMeasuredValues(
     sensorData.massConcentrationPm1p0, sensorData.massConcentrationPm2p5, sensorData.massConcentrationPm4p0,
-    sensorData.massConcentrationPm10p0, sensorData.ambientHumidity, sensorData.ambientTemperature, sensorData.vocIndex,
+    sensorData.massConcentrationPm10p0, sensorData.ambientHumidity, sensorData.ambientTemperatureF, sensorData.vocIndex,
     sensorData.noxIndex);
   if (error) {
     errorToString(error, errorMessage, 256);
@@ -482,48 +499,6 @@ void networkDisconnect()
   }
   #endif
 }
-
-// void powerDisable(int deepSleepTime)
-// // Powers down hardware in preparation for board deep sleep
-// {
-//   #ifdef SCREEN
-//     // debugMessage("Starting power down activities",1);
-//     // // power down epd
-//     // display.powerDown();
-//     // digitalWrite(EPD_RESET, LOW);  // hardware power down mode
-//     // debugMessage("powered down epd",1);
-//   #endif
-
-//   networkDisconnect();
-
-//   // power down sensor
-
-//   #if defined(ARDUINO_ADAFRUIT_FEATHER_ESP32_V2)
-//     // Turn off the I2C power
-//     pinMode(NEOPIXEL_I2C_POWER, OUTPUT);
-//     digitalWrite(NEOPIXEL_I2C_POWER, LOW);
-
-//     // if you need to turn the neopixel off
-//     // pinMode(NEOPIXEL_POWER, OUTPUT);
-//     // digitalWrite(NEOPIXEL_POWER, LOW);
-//     debugMessage("disabled Adafruit Feather ESP32 V2 I2C power",1);
-//   #endif
-
-//   #if defined(ARDUINO_ADAFRUIT_FEATHER_ESP32S2)
-//     // Rev B board is LOW to enable
-//     // Rev C board is HIGH to enable
-//     digitalWrite(PIN_I2C_POWER, LOW);
-
-//     // if you need to turn the neopixel off
-//     // pinMode(NEOPIXEL_POWER, OUTPUT);
-//     // digitalWrite(NEOPIXEL_POWER, LOW);
-//     debugMessage("disabled Adafruit Feather ESP32S2 I2C power",1);
-//   #endif
-
-//   esp_sleep_enable_timer_wakeup(deepSleepTime*1000000); // ESP microsecond modifier
-//   debugMessage(String("Going into ESP32 deep sleep for ") + (deepSleepTime) + " seconds",1);
-//   esp_deep_sleep_start();
-// }
 
 void debugMessage(String messageText, int messageLevel)
 // wraps Serial.println as #define conditional
