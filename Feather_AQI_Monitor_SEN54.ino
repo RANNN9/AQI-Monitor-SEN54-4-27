@@ -155,14 +155,14 @@ void loop()
 
       debugMessage("Current Readings: ",1);
       debugMessage(String("PM2.5: ") + sensorData.massConcentrationPm2p5 + " = AQI " + pm25toAQI(sensorData.massConcentrationPm2p5), 1);
-      debugMessage(String(", Temperature: ") + sensorData.ambientTemperatureF + " F",1);
-      debugMessage(String(", Humidity:  ") + sensorData.ambientHumidity + "%",1);
-      debugMessage(String(", VOC: ") + sensorData.vocIndex,1);
+      debugMessage(String("Temperature: ") + sensorData.ambientTemperatureF + " F",1);
+      debugMessage(String("Humidity:  ") + sensorData.ambientHumidity + "%",1);
+      debugMessage(String("VOC: ") + sensorData.vocIndex,1);
       debugMessage(String("Sample #") + numSamples + String(", running totals: "),1);
       debugMessage(String("PM25 total: ") + pm25Total,1);
-      debugMessage(String(", TempF total: ") + tempFTotal,1);
-      debugMessage(String(", Humidity total: ") + humidityTotal,1);
-      debugMessage(String(", VOC total: ") + vocTotal,1);
+      debugMessage(String("TempF total: ") + tempFTotal,1);
+      debugMessage(String("Humidity total: ") + humidityTotal,1);
+      debugMessage(String("VOC total: ") + vocTotal,1);
 
       screenPM();
       
@@ -238,70 +238,104 @@ void screenPM() {
 #ifdef SCREEN
   debugMessage("Starting screenPM refresh", 1);
 
-  // testing removal because the repaint order removes artifacts
-  // display.fillScreen(ST77XX_BLACK);
+  // clear screen
+  display.fillScreen(ST77XX_BLACK);
 
   // screen helper routines
-  screenHelperWiFiStatus((display.width() - xMargins - ((5*wifiBarWidth)+(5*wifiBarSpacing))), (yMargins + (5*wifiBarHeightIncrement)), wifiBarWidth, wifiBarHeightIncrement, wifiBarSpacing);
+  screenHelperWiFiStatus((display.width() - xMargins - ((5*wifiBarWidth)+(4*wifiBarSpacing))), (yMargins + (5*wifiBarHeightIncrement)), wifiBarWidth, wifiBarHeightIncrement, wifiBarSpacing);
 
   // temperature and humidity
   display.setFont(&FreeSans9pt7b);
   display.setTextColor(ST77XX_WHITE);
   display.setCursor(xMargins, yTemperature);
-  display.print(String(sensorData.ambientTemperatureF) + "F ");
+  display.print(sensorData.ambientTemperatureF,1);
+  display.print("F ");
   if ((sensorData.ambientHumidity<40) || (sensorData.ambientHumidity>60))
     display.setTextColor(ST7735_RED);
   else
     display.setTextColor(ST7735_GREEN);
-  display.print(String(sensorData.ambientHumidity) + "%");
-  // pm25 levels
+  display.print(sensorData.ambientHumidity,1);
+  display.print("%");
+
+  // pm25 level circle
   switch (int(sensorData.massConcentrationPm2p5/50))
   {
     case 0: // good
-      display.fillCircle(40,76,35,ST77XX_GREEN);
+      display.fillCircle(46,75,31,ST77XX_BLUE);
       break;
     case 1: // moderate
-      display.fillCircle(40,76,35,ST77XX_YELLOW);
+      display.fillCircle(46,75,31,ST77XX_GREEN);
       break;
     case 2: // unhealthy for sensitive groups
-      display.fillCircle(40,76,35,ST77XX_ORANGE);
+      display.fillCircle(46,75,31,ST77XX_YELLOW);
       break;
-    case 4: // unhealthy
-      display.fillCircle(40,76,35,ST77XX_RED);
+    case 3: // unhealthy
+      display.fillCircle(46,75,31,ST77XX_ORANGE);
+      break;
+    case 4: // very unhealthy
+      display.fillCircle(46,75,31,ST77XX_RED);
       break;
     case 5: // very unhealthy
-      display.fillCircle(40,76,35,ST77XX_GREEN);
+      display.fillCircle(46,75,31,ST77XX_RED);
       break;
-    case 6: // very unhealthy
-      display.fillCircle(40,76,35,ST77XX_BLUE);
-      break;
-    default: // >6 is hazardous
-      display.fillCircle(40,76,35,ST77XX_MAGENTA);
+    default: // >=6 is hazardous
+      display.fillCircle(46,75,31,ST77XX_MAGENTA);
       break;
   }
-  display.setTextColor(ST77XX_WHITE);
-  display.setCursor(40,56);
-  display.print("PM2.5");
-  display.setCursor(40,76);
-  display.print(int(sensorData.massConcentrationPm2p5));
-  // voc levels
 
-  // legend boxes
-  display.fillRect(xMargins,yLegend,legendWidth,legendHeight,ST77XX_GREEN);
-  display.fillRect(xMargins+legendWidth,yLegend,legendWidth,legendHeight,ST77XX_YELLOW);
-  display.fillRect((xMargins+(2*legendWidth)),yLegend,legendWidth,legendHeight,ST77XX_ORANGE);
-  display.fillRect((xMargins+(3*legendWidth)),yLegend,legendWidth,legendHeight,ST77XX_RED);
-  display.fillRect((xMargins+(4*legendWidth)),yLegend,legendWidth,legendHeight,ST7735_BLUE);
-  display.fillRect((xMargins+(5*legendWidth)),yLegend,legendWidth,legendHeight,ST77XX_MAGENTA);
-  
-  // legend labels
-  display.setFont(); // default system font
-  for (int i=0; i<6; i++)
+  // pm25 legend
+  display.fillRect(xMargins,yLegend,legendWidth,legendHeight,ST77XX_BLUE);
+  display.fillRect(xMargins,yLegend-legendHeight,legendWidth,legendHeight,ST77XX_GREEN);
+  display.fillRect(xMargins,(yLegend-(2*legendHeight)),legendWidth,legendHeight,ST77XX_YELLOW);
+  display.fillRect(xMargins,(yLegend-(3*legendHeight)),legendWidth,legendHeight,ST77XX_ORANGE);
+  display.fillRect(xMargins,(yLegend-(4*legendHeight)),legendWidth,legendHeight,ST77XX_RED);
+  display.fillRect(xMargins,(yLegend-(5*legendHeight)),legendWidth,legendHeight,ST77XX_MAGENTA);
+
+
+  // VoC level circle
+  switch (int(sensorData.vocIndex/100))
   {
-    display.setCursor((xMargins+(i*legendWidth)),yLegend+2);
-    display.print(airQualityLabel[i]);
+    case 0: // great
+      display.fillCircle(114,75,31,ST77XX_BLUE);
+      break;
+    case 1: // good
+      display.fillCircle(114,75,31,ST77XX_GREEN);
+      break;
+    case 2: // moderate
+      display.fillCircle(114,75,31,ST77XX_YELLOW);
+      break;
+    case 3: // 
+      display.fillCircle(114,75,31,ST77XX_ORANGE);
+      break;
+    case 4: // bad
+      display.fillCircle(114,75,31,ST77XX_RED);
+      break;
   }
-  debugMessage("screenPM refresh complete", 1);
+
+  // VoC legend
+  display.fillRect(display.width()-xMargins,yLegend,legendWidth,legendHeight,ST77XX_BLUE);
+  display.fillRect(display.width()-xMargins,yLegend-legendHeight,legendWidth,legendHeight,ST77XX_GREEN);
+  display.fillRect(display.width()-xMargins,(yLegend-(2*legendHeight)),legendWidth,legendHeight,ST77XX_YELLOW);
+  display.fillRect(display.width()-xMargins,(yLegend-(3*legendHeight)),legendWidth,legendHeight,ST77XX_ORANGE);
+  display.fillRect(display.width()-xMargins,(yLegend-(4*legendHeight)),legendWidth,legendHeight,ST77XX_RED);
+
+  // circle labels
+  display.setTextColor(ST77XX_WHITE);
+  display.setFont();
+  display.setCursor(33,110);
+  display.print("PM2.5");
+  display.setCursor(106,110);
+  display.print("VoC"); 
+
+
+  // pm25 level
+  display.setFont(&FreeSans9pt7b);
+  display.setCursor(40,80);
+  display.print(int(sensorData.massConcentrationPm2p5));
+
+  // VoC level
+  display.setCursor(100,80);
+  display.print(int(sensorData.vocIndex));
 #endif
 }
 
@@ -452,7 +486,7 @@ bool readSensor() {
     // keep this value in C, not F. Converted after readSensor()
     // testing range is 15 to 25
     sensorData.ambientTemperatureF = 15.0 + (random(0, 101) / 10.0);
-    sensorData.vocIndex = random(0, 3500) / 10.0;
+    sensorData.vocIndex = random(0, 500) / 10.0;
     sensorData.noxIndex = random(0, 2500) / 10.0;
     return true;
   #endif

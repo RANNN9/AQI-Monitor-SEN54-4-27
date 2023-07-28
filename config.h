@@ -7,7 +7,7 @@
 
 // Configuration Step 1: Set debug message output
 // comment out to turn off; 1 = summary, 2 = verbose
-#define DEBUG 2
+// #define DEBUG 1
 
 // Configuration Step 2: Set network data endpoints
 // #define MQTT     // log sensor data to MQTT broker
@@ -26,11 +26,11 @@
 // are averaged and reported at a longer interval.  Configure that behavior here,
 // allowing for more frequent processing when in DEBUG mode.
 #ifdef DEBUG
-  #define SAMPLE_INTERVAL 30   // sample interval for sensor in seconds
-  #define REPORT_INTERVAL 2   // Interval at which samples are averaged & reported in minutes)
+  #define SAMPLE_INTERVAL 30  // sensor sample interval in seconds
+  #define REPORT_INTERVAL 2   // sample averaging and reporting interval in minutes
 #else
-  #define SAMPLE_INTERVAL 120  // sample interval for sensor in seconds
-  #define REPORT_INTERVAL 30 // Interval at which samples are averaged & reported in minutes)
+  #define SAMPLE_INTERVAL 60
+  #define REPORT_INTERVAL 30
 #endif
 
 // Configuration Step 4: Set screen parameters, if desired
@@ -54,16 +54,16 @@
   const int wifiBarHeightIncrement = 3;
   const int wifiBarSpacing = 5;
   const int yTemperature = 23;
-  const int yLegend = 117;
-  const int legendHeight = 9;
-  const int legendWidth = 25; 
+  const int yLegend = 95;
+  const int legendHeight = 10;
+  const int legendWidth = 5; 
 #endif
 
 // Configuration Step 5: Set network data endpoint parameters, if applicable
 
 // set client ID; used by mqtt and wifi
-// structure is PM25_room-name; e.g. PM_kitchen
-#define CLIENT_ID "PM25-demo"
+// structure is PM25_room-name; e.g. PM25_kitchen
+#define CLIENT_ID "PM25_kitchen"
 
 #ifdef MQTT
   // Define MQTT topics used to publish sensor readings and device attributes.
@@ -100,7 +100,7 @@
 
   // Tag data reported to InfluxDB to facilitate retrieval by query later
   // NAME for this device, should be unique
-  #define DEVICE_NAME "pm25-demo"
+  #define DEVICE_NAME "pm25-kitchen"
 
   // TYPE conveys the kind or class of device.  A location may have multiple devices of a
   // particular type, so name would be unique but type would not.
@@ -108,7 +108,7 @@
 
   // Where is the device located?  Generally would the name of a room in a house or
   // building, e.g. "kitchen", "cellar", "workshop", etc.
-  #define DEVICE_LOCATION "PM25-demo"
+  #define DEVICE_LOCATION "kitchen"
 
   // SITE is typically indoor/outdoor or similar aspect apart from device LOCATION.
   // Can help group devices in ways that go beyond room/location.
@@ -135,5 +135,3 @@
 
 // Sleep time in seconds if hardware error occurs
 #define HARDWARE_ERROR_INTERVAL 10
-
-const String airQualityLabel[6]={"Good", "Moderate", "Sensitive", "Bad", "Very Bad", "Hazard"};
