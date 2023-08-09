@@ -5,54 +5,70 @@
   See README.md for target information and revision history
 */
 
-#include <SensirionI2CSen5x.h>
-#include <Wire.h>
-
+// hardware and internet configuration parameters
 #include "config.h"
+// private credentials for network, MQTT, weather provider
 #include "secrets.h"
 
-// Use WiFiClient class to create TCP connections and talk to hosts
-WiFiClient client;
-
-//Create SEN5x sensor instance
+// initialize pm25 sensor
+#include <SensirionI2CSen5x.h>
 SensirionI2CSen5x sen5x;
+
+// activate only if using network data endpoints
+#if defined(MQTT) || defined(INFLUX) || defined(HASSIO_MQTT)
+  #if defined(ESP8266)
+    #include <ESP8266WiFi.h>
+  #elif defined(ESP32)
+    #include <WiFi.h>
+  #endif
+#endif
+
+#ifdef SCREEN
+  // 1.8" TFT display with 128x160 pixels
+  #include <Adafruit_GFX.h>    // Core graphics library
+  #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
+  Adafruit_ST7735 display = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+
+  #include <Fonts/FreeSans9pt7b.h>
+  #include <Fonts/FreeSans12pt7b.h>
+  #include <Fonts/FreeSans18pt7b.h>
+#endif
 
 // global variables
 
 // PM sensor data
 typedef struct
 {
-  float massConcentrationPm1p0;
-  float massConcentrationPm2p5;
-  float massConcentrationPm10p0;
-  float massConcentrationPm4p0;
-  float ambientHumidity;
-  float ambientTemperature;
-  float vocIndex;
-  float noxIndex;  // Not supported by SEN54 (only SEN55)
+  float massConcentrationPm1p0;   // PM1.0 [µg/m³], NAN if unknown
+  float massConcentrationPm2p5;   // PM2.5 [µg/m³], NAN if unknown
+  float massConcentrationPm10p0;  // PM10.0 [µg/m³], NAN if unknown
+  float massConcentrationPm4p0;   // PM4.0 [µg/m³], NAN if unknown
+  float ambientHumidity;          // RH [%], NAN if unknown
+  float ambientTemperatureF;      // [°C], NAN in unknown
+  float vocIndex;                 // Sensiron VOC Index, NAN in unknown
+  float noxIndex;                 // NAN for unsupported devices (SEN54), also NAN for first 10-11 seconds
 } envData;
 envData sensorData;
 
 float humidityTotal = 0;  // running total of humidity over report interval
 float tempFTotal = 0;     // running total of temperature over report interval
 float vocTotal = 0;       // running total of VOC over report interval
-float avgTempF = 0;       // average temperature over report interval         
+float avgTempF = 0;       // average temperature over report interval
 float avgHumidity = 0;    // average humidity over report interval
 float avgVOC = 0;         // average VOC over report interval
 
-float pm25Total = 0;      // running total of humidity over report interval
-float avgPM25;            // average PM2.5 over report interval
+float pm25Total = 0;  // running total of humidity over report interval
+float avgPM25;        // average PM2.5 over report interval
 
-unsigned long prevReportMs = 0;   // Timestamp for measuring elapsed capture time
-unsigned long prevSampleMs  = 0;  // Timestamp for measuring elapsed sample time
-unsigned int numSamples = 0;      // Number of overall sensor readings over reporting interval
-unsigned int numReports = 0;      // Number of capture intervals observed
+unsigned long prevReportMs = 0;  // Timestamp for measuring elapsed capture time
+unsigned long prevSampleMs = 0;  // Timestamp for measuring elapsed sample time
+unsigned int numSamples = 0;     // Number of overall sensor readings over reporting interval
+unsigned int numReports = 0;     // Number of capture intervals observed
 // used by thingspeak and dweet
-float MinPm25 = 1999;   /* Observed minimum PM2.5 */
-float MaxPm25 = -99;   /* Observed maximum PM2.5 */
+float MinPm25 = 1999; /* Observed minimum PM2.5 */
+float MaxPm25 = -99;  /* Observed maximum PM2.5 */
 
-bool internetAvailable = false;
-int rssi;
+int rssi = 0;  // WiFi RSSI value
 
 // External function dependencies
 #ifdef DWEET
@@ -68,158 +84,311 @@ int rssi;
 #endif
 
 #ifdef MQTT
+  // MQTT uses WiFiClient class to create TCP connections
+  WiFiClient client;
+
   // MQTT interface depends on the underlying network client object, which is defined and
   // managed here (so needs to be defined here).
   #include <Adafruit_MQTT.h>
   #include <Adafruit_MQTT_Client.h>
   Adafruit_MQTT_Client pm25_mqtt(&client, MQTT_BROKER, MQTT_PORT, CLIENT_ID, MQTT_USER, MQTT_PASS);
 
-  // Adafruit PMSA003I
+// Adafruit PMSA003I
   extern bool mqttDeviceWiFiUpdate(int rssi);
   extern bool mqttSensorUpdate(float pm25, float aqi, float tempF, float vocIndex, float humidity);
 #endif
 
-void setup() 
-{
+void setup() {
   // handle Serial first so status messages and debugMessage() work
   Serial.begin(115200);
   // wait for serial port connection
-  // while (!Serial);  // FIX: Infinite loop if no serial connection
-  delay(5000);   // Workaround to give Serial port a chance to open
-  
-  // Enable LED for visual confirmation of reporting (and turn it off)
-  pinMode(LED_BUILTIN,OUTPUT);
-  digitalWrite(LED_BUILTIN, LED_BUILTIN_OFF);    // turn the LED
+  while (!Serial)
+    ;  // FIX: Infinite loop if no serial connection
 
   // Display key configuration parameters
-  Serial.println("PM2.5 monitor started");
-  Serial.println(String("Sample interval is ") + SAMPLE_INTERVAL + " seconds");
-  Serial.println(String("Report interval is ") + REPORT_INTERVAL + " minutes");
-  Serial.println(String("Internet service reconnect delay is ") + CONNECT_ATTEMPT_INTERVAL + " seconds");
+  debugMessage("PM2.5 monitor started", 1);
+  debugMessage(String("Sample interval is ") + SAMPLE_INTERVAL + " seconds", 2);
+  debugMessage(String("Report interval is ") + REPORT_INTERVAL + " minutes", 2);
+  debugMessage(String("Internet service reconnect delay is ") + CONNECT_ATTEMPT_INTERVAL + " seconds", 2);
 
-  // handle error condition
-  initSensor();
+  // Initialize environmental sensor
+  if (!sensorInit()) {
+    debugMessage("Environment sensor failed to initialize", 1);
+    screenAlert("NO PM25 sensor");
+    // This error often occurs right after a firmware flash and reset.
+    // Hardware deep sleep typically resolves it, so quickly cycle the hardware
+    //powerDisable(HARDWARE_ERROR_INTERVAL);
+  }
+
+  #ifdef SCREEN
+    display.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
+    display.setRotation(DISPLAY_ROTATION);
+    display.fillScreen(ST77XX_BLACK);
+  #endif
 
   // Remember current clock time
   prevReportMs = prevSampleMs = millis();
 
-  if(networkConnect()) {
-    internetAvailable = true;
-  }
-
-  debugMessage("----- Sampling -----");
+  networkConnect();
 }
 
-void loop()
+void loop() 
 {
   // update current timer value
   unsigned long currentMillis = millis();
 
   // is it time to read the sensor
-  if((currentMillis - prevSampleMs) >= (SAMPLE_INTERVAL * 1000)) // converting SAMPLE_INTERVAL into milliseconds
+  if ((currentMillis - prevSampleMs) >= (SAMPLE_INTERVAL * 1000))  // converting SAMPLE_INTERVAL into milliseconds
   {
-    if (readSensor()){
+    if (readSensor()) 
+    {
       numSamples++;
 
       // convert temp from C to F
-      sensorData.ambientTemperature = 32.0 + (1.8*sensorData.ambientTemperature);
+      sensorData.ambientTemperatureF = 32.0 + (1.8 * sensorData.ambientTemperatureF);
 
       // add to the running totals
       pm25Total += sensorData.massConcentrationPm2p5;
-      tempFTotal += sensorData.ambientTemperature;
+      tempFTotal += sensorData.ambientTemperatureF;
       humidityTotal += sensorData.ambientHumidity;
       vocTotal += sensorData.vocIndex;
 
-      Serial.print("Current Readings: ");
-      Serial.print(String("PM2.5: ") + sensorData.massConcentrationPm2p5 + " = AQI " + pm25toAQI(sensorData.massConcentrationPm2p5));
-      Serial.print(String(", Temp: ") + sensorData.ambientTemperature + " F");
-      Serial.print(String(", Humidity:  ") + sensorData.ambientHumidity + "%");
-      Serial.println(String(", VOC: ") + sensorData.vocIndex);
-      debugText(String("Sample #") + numSamples + String(", running totals: "),false);
-      debugText(String("PM25 total: ") + pm25Total,false);
-      debugText(String(", TempF total: ") + tempFTotal,false);
-      debugText(String(", Humidity total: ") + humidityTotal,false);
-      debugText(String(", VOC total: ") + vocTotal,true);
+      debugMessage("Current Readings: ",1);
+      debugMessage(String("PM2.5: ") + sensorData.massConcentrationPm2p5 + " = AQI " + pm25toAQI(sensorData.massConcentrationPm2p5), 1);
+      debugMessage(String("Temperature: ") + sensorData.ambientTemperatureF + " F",1);
+      debugMessage(String("Humidity:  ") + sensorData.ambientHumidity + "%",1);
+      debugMessage(String("VOC: ") + sensorData.vocIndex,1);
+      debugMessage(String("Sample #") + numSamples + String(", running totals: "),1);
+      debugMessage(String("PM25 total: ") + pm25Total,1);
+      debugMessage(String("TempF total: ") + tempFTotal,1);
+      debugMessage(String("Humidity total: ") + humidityTotal,1);
+      debugMessage(String("VOC total: ") + vocTotal,1);
 
+      screenPM();
+      
       // Save sample time
       prevSampleMs = currentMillis;
-    }
-    else
+    } 
+    else 
     {
-      debugMessage("Could not read SEN54 sensor data");
+      debugMessage("Could not read SEN54 sensor data", 1);
     }
   }
 
-  // is it time to report averaged values
-  if((currentMillis - prevReportMs) >= (REPORT_INTERVAL * 60 *1000)) // converting REPORT_INTERVAL into milliseconds
-  {
-    if (numSamples != 0) 
+  // do we have network endpoints to report to?
+  #if defined(MQTT) || defined(INFLUX) || defined(HASSIO_MQTT)
+    // is it time to report to the network endpoints?
+    if ((currentMillis - prevReportMs) >= (REPORT_INTERVAL * 60 * 1000))  // converting REPORT_INTERVAL into milliseconds
     {
-      avgPM25 = pm25Total / numSamples;
-      if(avgPM25 > MaxPm25) MaxPm25 = avgPM25;
-      if(avgPM25 < MinPm25) MinPm25 = avgPM25;
+      // do we have samples to report?
+      if (numSamples != 0) 
+      {
+        avgPM25 = pm25Total / numSamples;
+        if (avgPM25 > MaxPm25) MaxPm25 = avgPM25;
+        if (avgPM25 < MinPm25) MinPm25 = avgPM25;
 
-      avgTempF = tempFTotal / numSamples;
-      avgVOC = vocTotal / numSamples;
-      avgHumidity = humidityTotal / numSamples;
+        avgTempF = tempFTotal / numSamples;
+        avgVOC = vocTotal / numSamples;
+        avgHumidity = humidityTotal / numSamples;
 
-      Serial.println("----- Reporting -----");
-      Serial.print(String("Reporting averages (") + REPORT_INTERVAL + String(" minute): "));
+        debugMessage("----- Reporting -----",1);
+        debugMessage(String("Reporting averages (") + REPORT_INTERVAL + String(" minute): "),1);
+        debugMessage(String("PM2.5: ") + avgPM25 + String(" = AQI ") + pm25toAQI(avgPM25),1);
+        debugMessage(String("Temp: ") + avgTempF + String(" F"),1);
+        debugMessage(String("Humidity: ") + avgHumidity + String("%"),1);
+        debugMessage(String("VoC: ") + avgVOC,1);
 
-      Serial.print(String("PM2.5: ") + avgPM25 + String(" = AQI ") + pm25toAQI(avgPM25));
-      Serial.print(String(", Temp: ") + avgTempF + String(" F"));
-      Serial.print(String(", Humidity: ") + avgHumidity + String("%"));
-      Serial.println(String(", VoC: ") + avgVOC);
+        if (networkConnect())
+        {
+          /* Post both the current readings and historical max/min readings to the internet */
+          #ifdef DWEET
+            post_dweet(avgPM25, pm25toAQI(MinPm25), pm25toAQI(MaxPm25), pm25toAQI(avgPM25), avgTempF, avgVOC, avgHumidity);
+          #endif
 
-      // reconnect to WiFi if needed
-      if (WiFi.status() != WL_CONNECTED){
-          WiFi.disconnect();
-          WiFi.reconnect();
+          // Also post the AQI sensor data to ThingSpeak
+          #ifdef THINGSPEAK
+            post_thingspeak(avgPM25, pm25toAQI(MinPm25), pm25toAQI(MaxPm25), pm25toAQI(avgPM25));
+          #endif
+
+          #ifdef INFLUX
+            if (!post_influx(avgPM25, pm25toAQI(avgPM25), avgTempF, avgVOC, avgHumidity, rssi))
+              debugMessage("Did not write to influxDB",1);
+          #endif
+
+          #ifdef MQTT
+            if (!mqttDeviceWiFiUpdate(rssi))
+              debugMessage("Did not write device data to MQTT broker",1);
+            if (!mqttSensorUpdate(avgPM25, pm25toAQI(avgPM25), avgTempF, avgVOC, avgHumidity))
+              debugMessage("Did not write environment data to MQTT broker",1);
+          #endif
+        }
+        // Reset counters and accumulators
+        prevReportMs = currentMillis;
+        numSamples = 0;
+        pm25Total = 0;
+        tempFTotal = 0;
+        vocTotal = 0;
+        humidityTotal = 0;
       }
-
-      // Visual indication we're updating remote/internet services
-      blink_led();
-
-      /* Post both the current readings and historical max/min readings to the internet */
-      #ifdef DWEET
-        post_dweet(avgPM25,pm25toAQI(MinPm25),pm25toAQI(MaxPm25),pm25toAQI(avgPM25),avgTempF,avgVOC,avgHumidity);
-      #endif
-  
-      // Also post the AQI sensor data to ThingSpeak
-      #ifdef THINGSPEAK
-        post_thingspeak(avgPM25,pm25toAQI(MinPm25),pm25toAQI(MaxPm25),pm25toAQI(avgPM25));
-      #endif
-
-      #ifdef INFLUX
-        if(!post_influx(avgPM25,pm25toAQI(avgPM25),avgTempF,avgVOC,avgHumidity,rssi))
-          debugMessage("Did not write to influxDB");
-      #endif
-
-      #ifdef MQTT
-        if(!mqttDeviceWiFiUpdate(rssi))
-          debugMessage("Did not write device data to MQTT broker");
-        if(!mqttSensorUpdate(avgPM25, pm25toAQI(avgPM25),avgTempF,avgVOC,avgHumidity))
-          debugMessage("Did not write environment data to MQTT broker");
-      #endif
-
-      debugMessage("----- Sampling -----");
-      // Reset counters and accumulators
-      prevReportMs = currentMillis;
-      numSamples = 0;
-      pm25Total = 0;
-      tempFTotal = 0;
-      vocTotal = 0;
-      humidityTotal = 0;
     }
-    else
-    {
-      debugMessage("No samples to average and report on");
-    }
-  }
+  #endif
 }
 
-bool networkConnect()
+void screenPM() {
+#ifdef SCREEN
+  debugMessage("Starting screenPM refresh", 1);
+
+  // clear screen
+  display.fillScreen(ST77XX_BLACK);
+
+  // screen helper routines
+  screenHelperWiFiStatus((display.width() - xMargins - ((5*wifiBarWidth)+(4*wifiBarSpacing))), (yMargins + (5*wifiBarHeightIncrement)), wifiBarWidth, wifiBarHeightIncrement, wifiBarSpacing);
+
+  // temperature and humidity
+  display.setFont(&FreeSans9pt7b);
+  display.setTextColor(ST77XX_WHITE);
+  display.setCursor(xMargins, yTemperature);
+  display.print(sensorData.ambientTemperatureF,1);
+  display.print("F ");
+  if ((sensorData.ambientHumidity<40) || (sensorData.ambientHumidity>60))
+    display.setTextColor(ST7735_RED);
+  else
+    display.setTextColor(ST7735_GREEN);
+  display.print(sensorData.ambientHumidity,1);
+  display.print("%");
+
+  // pm25 level circle
+  switch (int(sensorData.massConcentrationPm2p5/50))
+  {
+    case 0: // good
+      display.fillCircle(46,75,31,ST77XX_BLUE);
+      break;
+    case 1: // moderate
+      display.fillCircle(46,75,31,ST77XX_GREEN);
+      break;
+    case 2: // unhealthy for sensitive groups
+      display.fillCircle(46,75,31,ST77XX_YELLOW);
+      break;
+    case 3: // unhealthy
+      display.fillCircle(46,75,31,ST77XX_ORANGE);
+      break;
+    case 4: // very unhealthy
+      display.fillCircle(46,75,31,ST77XX_RED);
+      break;
+    case 5: // very unhealthy
+      display.fillCircle(46,75,31,ST77XX_RED);
+      break;
+    default: // >=6 is hazardous
+      display.fillCircle(46,75,31,ST77XX_MAGENTA);
+      break;
+  }
+
+  // pm25 legend
+  display.fillRect(xMargins,yLegend,legendWidth,legendHeight,ST77XX_BLUE);
+  display.fillRect(xMargins,yLegend-legendHeight,legendWidth,legendHeight,ST77XX_GREEN);
+  display.fillRect(xMargins,(yLegend-(2*legendHeight)),legendWidth,legendHeight,ST77XX_YELLOW);
+  display.fillRect(xMargins,(yLegend-(3*legendHeight)),legendWidth,legendHeight,ST77XX_ORANGE);
+  display.fillRect(xMargins,(yLegend-(4*legendHeight)),legendWidth,legendHeight,ST77XX_RED);
+  display.fillRect(xMargins,(yLegend-(5*legendHeight)),legendWidth,legendHeight,ST77XX_MAGENTA);
+
+
+  // VoC level circle
+  switch (int(sensorData.vocIndex/100))
+  {
+    case 0: // great
+      display.fillCircle(114,75,31,ST77XX_BLUE);
+      break;
+    case 1: // good
+      display.fillCircle(114,75,31,ST77XX_GREEN);
+      break;
+    case 2: // moderate
+      display.fillCircle(114,75,31,ST77XX_YELLOW);
+      break;
+    case 3: // 
+      display.fillCircle(114,75,31,ST77XX_ORANGE);
+      break;
+    case 4: // bad
+      display.fillCircle(114,75,31,ST77XX_RED);
+      break;
+  }
+
+  // VoC legend
+  display.fillRect(display.width()-xMargins,yLegend,legendWidth,legendHeight,ST77XX_BLUE);
+  display.fillRect(display.width()-xMargins,yLegend-legendHeight,legendWidth,legendHeight,ST77XX_GREEN);
+  display.fillRect(display.width()-xMargins,(yLegend-(2*legendHeight)),legendWidth,legendHeight,ST77XX_YELLOW);
+  display.fillRect(display.width()-xMargins,(yLegend-(3*legendHeight)),legendWidth,legendHeight,ST77XX_ORANGE);
+  display.fillRect(display.width()-xMargins,(yLegend-(4*legendHeight)),legendWidth,legendHeight,ST77XX_RED);
+
+  // circle labels
+  display.setTextColor(ST77XX_WHITE);
+  display.setFont();
+  display.setCursor(33,110);
+  display.print("PM2.5");
+  display.setCursor(106,110);
+  display.print("VoC"); 
+
+
+  // pm25 level
+  display.setFont(&FreeSans9pt7b);
+  display.setCursor(40,80);
+  display.print(int(sensorData.massConcentrationPm2p5));
+
+  // VoC level
+  display.setCursor(100,80);
+  display.print(int(sensorData.vocIndex));
+#endif
+}
+
+void screenAlert(String messageText)
+// Display critical error message on screen
 {
+  display.fillScreen(ST77XX_BLACK);
+  display.setTextColor(ST77XX_WHITE);
+  display.setFont(&FreeSans12pt7b);
+  display.setCursor(40, (display.height() / 2 + 6));
+  display.print(messageText);
+}
+
+void screenHelperWiFiStatus(int initialX, int initialY, int barWidth, int barHeightIncrement, int barSpacing)
+// helper function for screenXXX() routines that draws WiFi signal strength
+{
+#ifdef SCREEN
+  if (rssi != 0) {
+    // Convert RSSI values to a 5 bar visual indicator
+    // >90 means no signal
+    int barCount = constrain((6 - ((rssi / 10) - 3)), 0, 5);
+    if (barCount > 0) {
+      // <50 rssi value = 5 bars, each +10 rssi value range = one less bar
+      // draw bars to represent WiFi strength
+      for (int b = 1; b <= barCount; b++) {
+        display.fillRect((initialX + (b * barSpacing)), (initialY - (b * barHeightIncrement)), barWidth, b * barHeightIncrement, ST77XX_WHITE);
+      }
+      debugMessage(String("WiFi signal strength on screen as ") + barCount + " bars", 2);
+    } else {
+      // you could do a visual representation of no WiFi strength here
+      debugMessage("RSSI too low, no display", 1);
+    }
+  }
+#endif
+}
+
+bool networkConnect() {
+  #ifdef SIMULATE_SENSOR
+    // IMPROVEMENT : Could simulate IP address
+    // testing range is 30 to 90 (no signal)
+    rssi  = random(30, 90);
+    return true;
+  #endif
+
+// Run only if using network data endpoints
+#if defined(MQTT) || defined(INFLUX) || defined(HASSIO_MQTT)
+
+  // reconnect to WiFi only if needed
+  if (WiFi.status() == WL_CONNECTED) 
+  {
+    debugMessage("Already connected to WiFi",2);
+    return true;
+  }
   // set hostname has to come before WiFi.begin
   WiFi.hostname(CLIENT_ID);
 
@@ -228,26 +397,21 @@ bool networkConnect()
   for (int tries = 1; tries <= CONNECT_ATTEMPT_LIMIT; tries++)
   // Attempts WiFi connection, and if unsuccessful, re-attempts after CONNECT_ATTEMPT_INTERVAL second delay for CONNECT_ATTEMPT_LIMIT times
   {
-    if (WiFi.status() == WL_CONNECTED)
-    {
+    if (WiFi.status() == WL_CONNECTED) {
       rssi = abs(WiFi.RSSI());
-      debugMessage(String("WiFi IP address lease from ") + WIFI_SSID + " is " + WiFi.localIP().toString());
-      debugMessage(String("WiFi RSSI is: ") + rssi + " dBm");
+      debugMessage(String("WiFi IP address lease from ") + WIFI_SSID + " is " + WiFi.localIP().toString(), 1);
+      debugMessage(String("WiFi RSSI is: ") + rssi + " dBm", 1);
       return true;
     }
-    debugMessage(String("Connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " to " + WIFI_SSID + " failed");
+    debugMessage(String("Connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " to " + WIFI_SSID + " failed", 1);
     // use of delay() OK as this is initialization code
-    delay(CONNECT_ATTEMPT_INTERVAL * 1000); // convered into milliseconds
+    delay(CONNECT_ATTEMPT_INTERVAL * 1000);  // convered into milliseconds
   }
+#endif
   return false;
 }
 
-bool initSensor()
-{
-  // SparkFun SEN5X
-  uint16_t error;
-  char errorMessage[256];
-
+bool sensorInit() {
   // If we're simulating the sensor there's nothing to init & we're good to go
   #ifdef SIMULATE_SENSOR
     return true;
@@ -261,15 +425,18 @@ bool initSensor()
     Wire.begin();
     sen5x.begin(Wire);
   #endif
-  
+
+  // SparkFun SEN5X
+  uint16_t error;
+  char errorMessage[256];
+
   error = sen5x.deviceReset();
-  if (error) 
-  {
+  if (error) {
     errorToString(error, errorMessage, 256);
-    debugMessage(String(errorMessage) + " error during SEN5x reset");
+    debugMessage(String(errorMessage) + " error during SEN5x reset", 1);
     return false;
   }
-  
+
   // set a temperature offset in degrees celsius
   // By default, the temperature and humidity outputs from the sensor
   // are compensated for the modules self-heating. If the module is
@@ -290,51 +457,52 @@ bool initSensor()
   float tempOffset = 0.0;
   error = sen5x.setTemperatureOffsetSimple(tempOffset);
   if (error) {
-      errorToString(error, errorMessage, 256);
-      debugMessage(String(errorMessage) + " error setting temp offset");
+    errorToString(error, errorMessage, 256);
+    debugMessage(String(errorMessage) + " error setting temp offset", 1);
   } else {
-      debugMessage(String("Temperature Offset set to ") + tempOffset + " degrees C");
+    debugMessage(String("Temperature Offset set to ") + tempOffset + " degrees C", 2);
   }
 
   // Start Measurement
   error = sen5x.startMeasurement();
   if (error) {
-      errorToString(error, errorMessage, 256);
-      debugMessage(String(errorMessage) + " error during SEN5x startMeasurement");
-      return false;
+    errorToString(error, errorMessage, 256);
+    debugMessage(String(errorMessage) + " error during SEN5x startMeasurement", 1);
+    return false;
   }
-  debugMessage("SEN5x initialized");
+  debugMessage("SEN5x initialized", 1);
   return true;
 }
 
-bool readSensor()
-{
+bool readSensor() {
+  // If we're simulating the sensor generate some reasonable values for measurements
+  #ifdef SIMULATE_SENSOR
+    sensorData.massConcentrationPm1p0 = random(0, 360) / 10.0;
+    sensorData.massConcentrationPm2p5 = random(0, 360) / 10.0;
+    sensorData.massConcentrationPm4p0 = random(0, 720) / 10.0;
+    sensorData.massConcentrationPm10p0 = random(0, 1550) / 10.0;
+    // testing range is 5 to 95
+    sensorData.ambientHumidity = 5 + (random(0, 900) / 10.0);
+    // keep this value in C, not F. Converted after readSensor()
+    // testing range is 15 to 25
+    sensorData.ambientTemperatureF = 15.0 + (random(0, 101) / 10.0);
+    sensorData.vocIndex = random(0, 500) / 10.0;
+    sensorData.noxIndex = random(0, 2500) / 10.0;
+    return true;
+  #endif
+
   // SparkFun SEN5X
   uint16_t error;
   char errorMessage[256];
 
-  // If we're simulating the sensor generate some reasonable values for measurements
-  #ifdef SIMULATE_SENSOR
-    sensorData.massConcentrationPm1p0 = random(0,360)/10.0;
-    sensorData.massConcentrationPm2p5 = random(0,360)/10.0;
-    sensorData.massConcentrationPm4p0 = random(0,720)/10.0;
-    sensorData.massConcentrationPm10p0 = random(0,1550)/10.0;
-    sensorData.ambientHumidity = 30.0 + (random(0,250)/10.0);
-    sensorData.ambientTemperature = 15.0 + (random(0,101)/10.0);
-    sensorData.vocIndex = random(0,3500)/10.0;
-    sensorData.noxIndex = random(0,2500)/10.0;
-    return true;
-  #endif
-
   error = sen5x.readMeasuredValues(
-        sensorData.massConcentrationPm1p0, sensorData.massConcentrationPm2p5, sensorData.massConcentrationPm4p0,
-        sensorData.massConcentrationPm10p0, sensorData.ambientHumidity, sensorData.ambientTemperature, sensorData.vocIndex,
-        sensorData.noxIndex);
-  if (error) 
-  {
-      errorToString(error, errorMessage, 256);
-      debugMessage(String(errorMessage) + " error during SEN5x read");
-      return false;
+    sensorData.massConcentrationPm1p0, sensorData.massConcentrationPm2p5, sensorData.massConcentrationPm4p0,
+    sensorData.massConcentrationPm10p0, sensorData.ambientHumidity, sensorData.ambientTemperatureF, sensorData.vocIndex,
+    sensorData.noxIndex);
+  if (error) {
+    errorToString(error, errorMessage, 256);
+    debugMessage(String(errorMessage) + " error during SEN5x read",1);
+    return false;
   }
   return true;
 }
@@ -342,49 +510,37 @@ bool readSensor()
 float pm25toAQI(float pm25)
 // Converts pm25 reading to AQI using the AQI Equation
 // (https://forum.airnowtech.org/t/the-aqi-equation/169)
-{  
-  if(pm25 <= 12.0)       return(fmap(pm25,  0.0, 12.0,  0.0, 50.0));
-  else if(pm25 <= 35.4)  return(fmap(pm25, 12.1, 35.4, 51.0,100.0));
-  else if(pm25 <= 55.4)  return(fmap(pm25, 35.5, 55.4,101.0,150.0));
-  else if(pm25 <= 150.4) return(fmap(pm25, 55.5,150.4,151.0,200.0));
-  else if(pm25 <= 250.4) return(fmap(pm25,150.5,250.4,201.0,300.0));
-  else if(pm25 <= 500.4) return(fmap(pm25,250.5,500.4,301.0,500.0));
-  else return(505.0);  // AQI above 500 not recognized
-}
-
-float fmap(float x, float xmin, float xmax, float ymin, float ymax)
 {
-    return( ymin + ((x - xmin)*(ymax-ymin)/(xmax - xmin)));
+  if (pm25 <= 12.0) return (fmap(pm25, 0.0, 12.0, 0.0, 50.0));
+  else if (pm25 <= 35.4) return (fmap(pm25, 12.1, 35.4, 51.0, 100.0));
+  else if (pm25 <= 55.4) return (fmap(pm25, 35.5, 55.4, 101.0, 150.0));
+  else if (pm25 <= 150.4) return (fmap(pm25, 55.5, 150.4, 151.0, 200.0));
+  else if (pm25 <= 250.4) return (fmap(pm25, 150.5, 250.4, 201.0, 300.0));
+  else if (pm25 <= 500.4) return (fmap(pm25, 250.5, 500.4, 301.0, 500.0));
+  else return (505.0);  // AQI above 500 not recognized
 }
 
-void debugMessage(String messageText)
+float fmap(float x, float xmin, float xmax, float ymin, float ymax) {
+  return (ymin + ((x - xmin) * (ymax - ymin) / (xmax - xmin)));
+}
+
+void networkDisconnect()
+{
+  #if defined(MQTT) || defined(INFLUX) || defined(HASSIO_MQTT)
+  {
+    WiFi.disconnect();
+    debugMessage("Disconnected from WiFi network",1);
+  }
+  #endif
+}
+
+void debugMessage(String messageText, int messageLevel)
 // wraps Serial.println as #define conditional
 {
-  #ifdef DEBUG
+#ifdef DEBUG
+  if (messageLevel <= DEBUG) {
     Serial.println(messageText);
     Serial.flush();  // Make sure the message gets output (before any sleeping...)
-  #endif
-}
-
-// Output debug text to Serial, allows optional newline after the text
-void debugText(String outputText,bool newline)
-{
-  #ifdef DEBUG
-    if(newline) {
-      Serial.println(outputText);
-      Serial.flush();
-    }
-    else {
-      Serial.print(outputText);
-    }
-  #endif
-}
-
-void blink_led()
-{
-      // Blink the LED
-      digitalWrite(LED_BUILTIN, LED_BUILTIN_ON);   // turn the LED on
-      delay(500);                // wait for a half second
-      digitalWrite(LED_BUILTIN, LED_BUILTIN_OFF);    // turn the LED
-      delay(500);
+  }
+#endif
 }

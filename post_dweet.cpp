@@ -13,7 +13,7 @@
 #ifdef DWEET
 
   // Shared helper function(s)
-  extern void debugMessage(String messageText);
+  extern void debugMessage(String messageText, int messageLevel);
 
   // David's original PM2.5 dweet code
   const char* dweet_host = "dweet.io";
@@ -22,15 +22,15 @@
     WiFiClient dweet_client;
 
     if(WiFi.status() != WL_CONNECTED) {
-      debugMessage("Lost network connection to " + String(WIFI_SSID) + "!");
+      debugMessage("Lost network connection to " + String(WIFI_SSID) + "!",1);
       return;
     }
     
-    debugMessage("Connecting to " + String(dweet_host) + " as " + String(DWEET_DEVICE));
+    debugMessage("Connecting to " + String(dweet_host) + " as " + String(DWEET_DEVICE),1);
         
     // Use our WiFiClient to connect to dweet
     if (!dweet_client.connect(dweet_host, 80)) {
-      debugMessage("Connection failed!");
+      debugMessage("Connection failed!",1);
       return;
     }
 
@@ -58,19 +58,19 @@
     dweet_client.println(postdata.length());
     dweet_client.println();
     dweet_client.println(postdata);
-    debugMessage("Dweet POST:");
-    debugMessage(postdata);
+    debugMessage("Dweet POST:",1);
+    debugMessage(postdata,1);
 
     delay(1500);  
 
     // Read all the lines of the reply from server (if any) and print them to Serial Monitor
     #ifdef DEBUG
-      Serial.println("Dweet server response:");
+      debugMessageln("Dweet server response:",1);
       while(dweet_client.available()){
         String line = dweet_client.readStringUntil('\r');
-        Serial.print(line);
+        debugMessage(line,1);
       }
-      Serial.println("-----");
+      debugMessageln("-----",1);
     #endif
     
     // Close client connection to dweet server

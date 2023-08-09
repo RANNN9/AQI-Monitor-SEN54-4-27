@@ -5,27 +5,18 @@
   See README.md for target information and revision history
 */
 
-// Choose the right WiFi package, either ESP32 or ESP8266.  Provides access
-// to the WiFiClient object class and accessor.  May not be needed for all
-// network service access where service-specific libraries encapsulate it.
+// Configuration Step 1: Set debug message output
+// comment out to turn off; 1 = summary, 2 = verbose
+// #define DEBUG 1
 
-// ESP32 WiFi
-//#include <WiFi.h>
-
-// ESP8266 WiFi
-#include <ESP8266WiFi.h>
-
-// When is the onboard LED (LED_BUILTIN) on?  
-#define LED_BUILTIN_ON    LOW
-#define LED_BUILTIN_OFF   HIGH
-
-// Step 1: Set conditional compile flags
-#define DEBUG     // Output to serial port
-#define MQTT        // log sensor data to MQTT broker
-//#define HASSIO_MQTT  // And, if MQTT enabled, with Home Assistant too?
-#define INFLUX      // Log data to InfluxDB server
+// Configuration Step 2: Set network data endpoints
+// #define MQTT     // log sensor data to MQTT broker
+// #define HASSIO_MQTT  // And, if MQTT enabled, with Home Assistant too?
+#define INFLUX // Log data to InfluxDB server
 // #define DWEET       // Log data to Dweet service
 // #define THINGSPEAK  // Log data to ThingSpeak
+
+// Configuration Step 3: Select environment sensor read intervals
 
 // Simulate SEN5x sensor operations, e.g. for testing or easier development.  Returns random
 // but plausible values for sensor readings.
@@ -35,22 +26,44 @@
 // are averaged and reported at a longer interval.  Configure that behavior here,
 // allowing for more frequent processing when in DEBUG mode.
 #ifdef DEBUG
-  #define SAMPLE_INTERVAL 5   // sample interval for sensor in seconds
-  #define REPORT_INTERVAL 1   // Interval at which samples are averaged & reported in minutes)
+  #define SAMPLE_INTERVAL 30  // sensor sample interval in seconds
+  #define REPORT_INTERVAL 2   // sample averaging and reporting interval in minutes
 #else
-  #define SAMPLE_INTERVAL 30  // sample interval for sensor in seconds
-  #define REPORT_INTERVAL 15 // Interval at which samples are averaged & reported in minutes)
+  #define SAMPLE_INTERVAL 60
+  #define REPORT_INTERVAL 30
 #endif
 
-// To allow for varying network singal strength and responsiveness, make multiple
-// attempts to connect to internet services at a measured interval.  If your environment
-// is more challenged you may want to allow for more connection attempts and/or a longer
-// delay between connection attempts.
-const int CONNECT_ATTEMPT_LIMIT = 3;      // max connection attempts to internet services
-const int CONNECT_ATTEMPT_INTERVAL = 5;  // seconds between internet service connect attempts
+// Configuration Step 4: Set screen parameters, if desired
+#define  SCREEN    // use screen as output
+
+// Pin config for display
+#ifdef SCREEN
+  #define TFT_CS         16
+  #define TFT_RST        15                                            
+  #define TFT_DC         0
+
+  // rotation 1 orients the display so the pins are at the bottom of the display
+  // rotation 2 orients the display so the pins are at the top of the display
+  // rotation of 3 flips it so the wiring is on the left side of the display
+  #define DISPLAY_ROTATION 3
+
+  // screen layout assists in pixels
+  const int xMargins = 5;
+  const int yMargins = 2;
+  const int wifiBarWidth = 3;
+  const int wifiBarHeightIncrement = 3;
+  const int wifiBarSpacing = 5;
+  const int yTemperature = 23;
+  const int yLegend = 95;
+  const int legendHeight = 10;
+  const int legendWidth = 5; 
+#endif
+
+// Configuration Step 5: Set network data endpoint parameters, if applicable
 
 // set client ID; used by mqtt and wifi
-#define CLIENT_ID "PM25"
+// structure is PM25_room-name; e.g. PM25_kitchen
+#define CLIENT_ID "PM25_kitchen"
 
 #ifdef MQTT
   // Define MQTT topics used to publish sensor readings and device attributes.
@@ -87,7 +100,7 @@ const int CONNECT_ATTEMPT_INTERVAL = 5;  // seconds between internet service con
 
   // Tag data reported to InfluxDB to facilitate retrieval by query later
   // NAME for this device, should be unique
-  #define DEVICE_NAME "pm25-test"
+  #define DEVICE_NAME "pm25-kitchen"
 
   // TYPE conveys the kind or class of device.  A location may have multiple devices of a
   // particular type, so name would be unique but type would not.
@@ -95,7 +108,7 @@ const int CONNECT_ATTEMPT_INTERVAL = 5;  // seconds between internet service con
 
   // Where is the device located?  Generally would the name of a room in a house or
   // building, e.g. "kitchen", "cellar", "workshop", etc.
-  #define DEVICE_LOCATION "PM25-test"
+  #define DEVICE_LOCATION "kitchen"
 
   // SITE is typically indoor/outdoor or similar aspect apart from device LOCATION.
   // Can help group devices in ways that go beyond room/location.
@@ -110,3 +123,15 @@ const int CONNECT_ATTEMPT_INTERVAL = 5;  // seconds between internet service con
   #define DWEET_HOST "dweet.io"   // Typically dweet.io
   #define DWEET_DEVICE "makerhour-airquality"  // Must be unique across all of dweet.io
 #endif
+
+// Configuration variables that are less likely to require changes
+
+// To allow for varying network singal strength and responsiveness, make multiple
+// attempts to connect to internet services at a measured interval.  If your environment
+// is more challenged you may want to allow for more connection attempts and/or a longer
+// delay between connection attempts.
+#define CONNECT_ATTEMPT_LIMIT 3     // max connection attempts to internet services
+#define CONNECT_ATTEMPT_INTERVAL 10 // seconds between internet service connect attempts
+
+// Sleep time in seconds if hardware error occurs
+#define HARDWARE_ERROR_INTERVAL 10

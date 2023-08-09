@@ -10,7 +10,7 @@
 
 #ifdef THINGSPEAK
   // Shared helper function(s)
-  extern void debugMessage(String messageText);
+  extern void debugMessage(String messageText, int messageLevel);
 
   const char* ts_server = "api.thingspeak.com";
   void post_thingspeak(float pm25, float minaqi, float maxaqi, float aqi) {
@@ -41,20 +41,20 @@
       tspeak_client.println("Content-Length: " + String(body.length()));
       tspeak_client.println("");
       tspeak_client.print(body);
-      debugMessage("ThingSpeak POST:");
-      debugMessage(body);
+      debugMessage("ThingSpeak POST:",1);
+      debugMessage(body,1);
 
     }
     delay(1500);
       
     // Read all the lines of the reply from server (if any) and print them to Serial Monitor
     #ifdef DEBUG
-      Serial.println("ThingSpeak server response:");
+      debugMessageln("ThingSpeak server response:",1);
       while(tspeak_client.available()){
         String line = tspeak_client.readStringUntil('\r');
-        Serial.print(line);
+        debugMessage(line,1);
       }
-      Serial.println("-----");
+      debugMessageln("-----",1);
     #endif
 
     tspeak_client.stop();

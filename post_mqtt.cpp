@@ -16,14 +16,11 @@
 #ifdef MQTT
 
   // Shared helper function
-  extern void debugMessage(String messageText);
+  extern void debugMessage(String messageText, int messageLevel);
 
   #ifdef HASSIO_MQTT
     extern void hassio_mqtt_publish(float pm25, float aqi, float tempF, float vocIndex, float humidity);
   #endif
-
-  // Status variables shared across various functions
-  extern bool internetAvailable;
 
   // MQTT setup
   #include <Adafruit_MQTT.h>
@@ -36,7 +33,7 @@
     // exit if already connected
     if (pm25_mqtt.connected())
     {
-      debugMessage(String("Already connected to MQTT broker ") + MQTT_BROKER);
+      debugMessage(String("Already connected to MQTT broker ") + MQTT_BROKER,1);
       return;
     }
     
@@ -50,21 +47,8 @@
         debugMessage(String("Connected to MQTT broker ") + MQTT_BROKER);
         return;
       }
-      // else
-      // {
-        // Adafruit IO connect errors
-        // switch (mqttErr)
-        // {
-        //   case 1: debugMessage("Adafruit MQTT: Wrong protocol"); break;
-        //   case 2: debugMessage("Adafruit MQTT: ID rejected"); break;
-        //   case 3: debugMessage("Adafruit MQTT: Server unavailable"); break;
-        //   case 4: debugMessage("Adafruit MQTT: Incorrect user or password"); break;
-        //   case 5: debugMessage("Adafruit MQTT: Not authorized"); break;
-        //   case 6: debugMessage("Adafruit MQTT: Failed to subscribe"); break;
-        //   default: debugMessage("Adafruit MQTT: GENERIC - Connection failed"); break;
-        // }
       pm25_mqtt.disconnect();
-      debugMessage(String("MQTT connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " failed with error msg: " + pm25_mqtt.connectErrorString(mqttErr));
+      debugMessage(String("MQTT connection attempt ") + tries + " of " + CONNECT_ATTEMPT_LIMIT + " failed with error msg: " + pm25_mqtt.connectErrorString(mqttErr),1);
       delay(CONNECT_ATTEMPT_INTERVAL*1000);
       // }
     }
@@ -73,7 +57,7 @@
   bool mqttDeviceWiFiUpdate(int rssi)
   {
     bool result = false;
-    if (internetAvailable)
+    if (rssi!=0)
     {
       // Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_RSSI, MQTT_QOS_1); // if problematic, remove QOS parameter
       Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_RSSI);
@@ -82,12 +66,12 @@
 
       if (rssiLevelPub.publish(rssi))
       {
-        debugMessage("MQTT publish: WiFi RSSI succeeded");
+        debugMessage("MQTT publish: WiFi RSSI succeeded",1);
         result = true;
       }
       else
       {
-        debugMessage("MQTT publish: WiFi RSSI failed");
+        debugMessage("MQTT publish: WiFi RSSI failed",1);
       }
       //pm25_mqtt.disconnect();
     }
@@ -98,73 +82,70 @@
   // Publishes sensor data to MQTT broker
   {
     bool result = false;
-    if (internetAvailable)
+
+    // add ,MQTT_QOS_1); if problematic, remove QOS parameter
+    Adafruit_MQTT_Publish tempfPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TEMPF);
+    Adafruit_MQTT_Publish humidityPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_HUMIDITY);
+    Adafruit_MQTT_Publish vocPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_VOC);
+    Adafruit_MQTT_Publish pm25Pub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_PM25);
+    Adafruit_MQTT_Publish aqiPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_AQI);
+
+    mqttConnect();
+
+    // Attempt to publish sensor data
+    if(pm25Pub.publish(pm25))
     {
-      // add ,MQTT_QOS_1); if problematic, remove QOS parameter
-      Adafruit_MQTT_Publish tempfPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_TEMPF);
-      Adafruit_MQTT_Publish humidityPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_HUMIDITY);
-      Adafruit_MQTT_Publish vocPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_VOC);
-      Adafruit_MQTT_Publish pm25Pub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_PM25);
-      Adafruit_MQTT_Publish aqiPub = Adafruit_MQTT_Publish(&pm25_mqtt, MQTT_PUB_AQI);
-
-      mqttConnect();
-
-      // Attempt to publish sensor data
-      if(pm25Pub.publish(pm25))
-      {
-        debugMessage("MQTT publish: PM2.5 succeeded");
-        debugMessage(MQTT_PUB_PM25);
-        result = true;
-      }
-      else {
-        debugMessage("MQTT publish: PM2.5 failed");
-      }
-      
-      if(aqiPub.publish(aqi))
-      {
-        debugMessage("MQTT publish: AQI succeeded");
-        result = true;
-      }
-      else {
-        debugMessage("MQTT publish: AQI failed");
-        result = false;
-      }
-
-      if(vocPub.publish(vocIndex))
-      {
-        debugMessage("MQTT publish: VOC index succeeded");
-        result = true;
-      }
-      else {
-        debugMessage("MQTT publish: VOC index failed");
-      }
-
-      if(tempfPub.publish(tempF))
-      {
-        debugMessage("MQTT publish: Temperature succeeded");
-        result = true;
-      }
-      else {
-        debugMessage("MQTT publish: Temperature failed");
-      }
-
-      if(humidityPub.publish(humidity))
-      {
-        debugMessage("MQTT publish: Humidity succeeded");
-        result = true;
-      }
-      else {
-        debugMessage("MQTT publish: Humidity failed");
-      }
-
-      #ifdef HASSIO_MQTT
-        // Either configure sensors in Home Assistant's configuration.yaml file
-        // directly or attempt to do it via MQTT auto-discovery
-        // hassio_mqtt_setup();  // Config for MQTT auto-discovery
-        hassio_mqtt_publish(pm25,aqi,tempF,vocIndex,humidity);
-      #endif
-      //pm25_mqtt.disconnect();
+      debugMessage("MQTT publish: PM2.5 succeeded",1);
+      debugMessage(MQTT_PUB_PM25);
+      result = true;
     }
+    else {
+      debugMessage("MQTT publish: PM2.5 failed",1);
+    }
+    
+    if(aqiPub.publish(aqi))
+    {
+      debugMessage("MQTT publish: AQI succeeded",1);
+      result = true;
+    }
+    else {
+      debugMessage("MQTT publish: AQI failed",1);
+      result = false;
+    }
+
+    if(vocPub.publish(vocIndex))
+    {
+      debugMessage("MQTT publish: VOC index succeeded",1);
+      result = true;
+    }
+    else {
+      debugMessage("MQTT publish: VOC index failed",1);
+    }
+
+    if(tempfPub.publish(tempF))
+    {
+      debugMessage("MQTT publish: Temperature succeeded",1);
+      result = true;
+    }
+    else {
+      debugMessage("MQTT publish: Temperature failed",1);
+    }
+
+    if(humidityPub.publish(humidity))
+    {
+      debugMessage("MQTT publish: Humidity succeeded",1);
+      result = true;
+    }
+    else {
+      debugMessage("MQTT publish: Humidity failed",1);
+    }
+
+    #ifdef HASSIO_MQTT
+      // Either configure sensors in Home Assistant's configuration.yaml file
+      // directly or attempt to do it via MQTT auto-discovery
+      // hassio_mqtt_setup();  // Config for MQTT auto-discovery
+      hassio_mqtt_publish(pm25,aqi,tempF,vocIndex,humidity);
+    #endif
     return(result);
   }
 #endif
