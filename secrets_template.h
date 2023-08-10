@@ -1,42 +1,48 @@
-// Copy this file to "secrets.h" and adjust the access credentials here to
-// match your deployment environment.
+/*
+  Project:		pm25
+  Description:	private configuration data template that needs to be saved as secrets.h after github cloning the project
+*/
 
-// // WiFi configuration settings
+// Configuration Step 1: Set WiFi credentials
+// set the WiFi SSID and password to connect to network (data endpoints)
 // #define WIFI_SSID "YOUR_WIFI_SSID"
 // #define WIFI_PASS "YOUR_WIFI_PASSWORD"
 
-// MQTT configuration settings
+// Configuration Step 2: If using MQTT, set MQTT broker login parameters
 // #ifdef MQTT
-//  #define MQTT BROKER    "mqtt.hostname.local or IP address"
-// 	#define MQTT_PORT  			port_number	// use 8883 for SSL
-// 	#define MQTT_USER			 "key_value"
-//  #define MQTT_PASSWORD  "key_value"
+//  #define MQTT BROKER		"mqtt.hostname.local or IP address"
+// 	#define MQTT_PORT  		port_number	// use 8883 for SSL
+// 	#define MQTT_USER		"key_value"
+//  #define MQTT_PASSWORD	"key_value"
 // #endif
 
-// // Device configuration info for ThingSpeak
+// Configuration Step 3: If using ThingSpeak, set login parameters
 // #define THINGS_CHANID 9999999           // ThingSpeak channel ID
 // #define THINGS_APIKEY "CHANNEL_WRITE_APIKEY"// write API key for ThingSpeak Channel
 
+// Configuration Step 4: If using influxdb, set login and storage parameters
+// #ifdef INFLUX
+	// For an InfluxDB v1.X server:
+	// #define INFLUX_V1			"key_value"
+	// #define INFLUXDB_URL			"key_value"
+	// #define INFLUXDB_DB_NAME		"key_value"
+	// #define INFLUXDB_USER		"key_value"
+	// #define INFLUXDB_PASSWORD	"key_value"
+	//
+	// For an InfluxDB v2.X server:
+	// #define INFLUX_V2			"key_value"
+	// #define INFLUXDB_URL			"IP address with port number"
+	// #define INFLUXDB_TOKEN		"key_value"
+	// #define INFLUXDB_ORG			"key_value"
+	// #define INFLUXDB_BUCKET		"key_value"
+// #endif
 
-// InfluxDB access information, varies depending on whether target server is
-// running v1 or v2 of InfluxDB.  Configure as appropriate.
-
-// If server runs Influx v1.X, configure here
-// InfluxDB server url using name or IP address (not localhost)
-// #define INFLUXDB_URL "http://influxdbhost.local:8086"
-// InfluxDB v1 database name 
-// #define INFLUXDB_DB_NAME "home"
-// InfluxDB v1 user name
-// #define INFLUXDB_USER "GRAFANA_USER"
-// InfluxDB v1 user password
-// #define INFLUXDB_PASSWORD "GRAFANA_PASSWORD"
-
-// If server runs InfluxDB v2.X, configure here
-// InfluxDB 2 server url, e.g. http://192.168.1.48:8086 (Use: InfluxDB UI -> Load Data -> Client Libraries)
-// #define INFLUXDB_URL "http://influxdbhost.local:8086"
-// InfluxDB 2 server or cloud API authentication token (Use: InfluxDB UI -> Load Data -> Tokens -> <select token>)
-// #define INFLUXDB_TOKEN "--InfluxDB--access-token-value--"
-// InfluxDB 2 organization name or id (Use: InfluxDB UI -> Settings -> Profile -> <name under tile> )
-// #define INFLUXDB_ORG "influxdborg"
-// InfluxDB 2 bucket name (Use: InfluxDB UI -> Load Data -> Buckets)
-// #define INFLUXDB_BUCKET "influxdbbucket"
+// Configuration Step 5: Set key device and installation configuration parameters.  These are used
+// widely throughout the code to properly identify the device and generate important
+// operating elements like MQTT topics, InfluxDB data tags (metadata).  Should be
+// customized to match the target installation. Values here are examples.
+// #define DEVICE           "key_value"	// e.g. name of device, "realtime_co2"
+// #define DEVICE_SITE      "key_value"	// e.g. physical address of the device, "1234 Main Street"
+// #define DEVICE_LOCATION  "key_value"	// e.g. general location of device at physical address, "indoor"
+// #define DEVICE_ROOM      "key_value"	// e.g. specific location of device within location, "kitchen"
+// #define DEVICE_ID        "key_value"	// e.g. unique ID for the device, "pm25-007"

@@ -1,6 +1,6 @@
 /*
-  Project Name:   PM2.5
-  Description:    write PM2.5 sensor data to InfluxDB
+  Project:      pm25
+  Description:  write PM2.5 sensor data to InfluxDB
 
   See README.md for target information and revision history
 */
@@ -9,6 +9,8 @@
 
 // hardware and internet configuration parameters
 #include "config.h"
+// Overall data and metadata naming scheme
+#include "data.h"
 // private credentials for network, MQTT, weather provider
 #include "secrets.h"
 
@@ -37,7 +39,7 @@
 
 
   // Post data to Influx DB using the connection established during setup
-  boolean post_influx(float pm25, float aqi, float tempF, float vocIndex, float humidity, int rssi)
+  boolean post_influx(float pm25, float aqi, float temperatureF, float vocIndex, float humidity, int rssi)
   {
     bool result = false;
 
@@ -56,15 +58,17 @@
       // Add constant Influx data point tags - only do once, will be added to all individual data points
       // Modify if required to reflect your InfluxDB data model (and set values in config.h)
       // First for environmental data
-      dbenvdata.addTag("device", DEVICE_NAME);
-      dbenvdata.addTag("device-type", DEVICE_TYPE);
-      dbenvdata.addTag("location", DEVICE_LOCATION);
-      dbenvdata.addTag("site", DEVICE_SITE);
+      dbenvdata.addTag(TAG_KEY_DEVICE, DEVICE);
+      dbenvdata.addTag(TAG_KEY_SITE, DEVICE_SITE);
+      dbenvdata.addTag(TAG_KEY_LOCATION, DEVICE_LOCATION);
+      dbenvdata.addTag(TAG_KEY_ROOM, DEVICE_ROOM);
+      // DEVICE_ID not implemented yet
+      // dbenvdata.addTag(TAG_KEY_DEVICE_ID, DEVICE_ID);
       // And again for device data
-      dbdevdata.addTag("device", DEVICE_NAME);
-      dbdevdata.addTag("device-type", DEVICE_TYPE);
-      dbdevdata.addTag("location", DEVICE_LOCATION);
-      dbdevdata.addTag("site", DEVICE_SITE);
+      dbdevdata.addTag(TAG_KEY_DEVICE, DEVICE);
+      dbdevdata.addTag(TAG_KEY_SITE, DEVICE_SITE);
+      dbdevdata.addTag(TAG_KEY_LOCATION, DEVICE_LOCATION);
+      dbdevdata.addTag(TAG_KEY_ROOM, DEVICE_ROOM);
 
       // Attempts influxDB connection, and if unsuccessful, re-attempts after CONNECT_ATTEMPT_INTERVAL second delay for CONNECT_ATTEMPT_LIMIT times
       for (int tries = 1; tries <= CONNECT_ATTEMPT_LIMIT; tries++) {
@@ -81,11 +85,11 @@
         // Connected, so store sensor values into timeseries data points
         dbenvdata.clearFields();
         // Report sensor readings
-        dbenvdata.addField("pm25", pm25);
-        dbenvdata.addField("aqi", aqi);
-        dbenvdata.addField("temperatureF", tempF);
-        dbenvdata.addField("vocIndex", vocIndex);
-        dbenvdata.addField("humidity", humidity);
+        dbenvdata.addField(VALUE_KEY_PM25, pm25);
+        dbenvdata.addField(VALUE_KEY_AQI, aqi);
+        dbenvdata.addField(VALUE_KEY_TEMPERATURE, temperatureF);
+        dbenvdata.addField(VALUE_KEY_HUMIDITY, humidity);
+        dbenvdata.addField(VALUE_KEY_VOC, vocIndex);
         // Write point via connection to InfluxDB host
         if (!dbclient.writePoint(dbenvdata)) {
           debugMessage(String("InfluxDB write failed: ") + dbclient.getLastErrorMessage(),1);
@@ -99,7 +103,7 @@
         // Now store device information 
         dbdevdata.clearFields();
         // Report device readings
-        dbdevdata.addField("rssi", rssi);
+        dbdevdata.addField(VALUE_KEY_RSSI, rssi);
         // Write point via connection to InfluxDB host
         if (!dbclient.writePoint(dbdevdata))
         {

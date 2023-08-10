@@ -1,8 +1,8 @@
 /*
-  Project Name:   PM2.5 monitor
-  Description:    Regularly sample and log PM 2.5 levels
+  Project:      pm25
+  Description:  Regularly sample and log PM 2.5 levels
 
-  See README.md for target information and revision history
+  See README.md for target information
 */
 
 // hardware and internet configuration parameters
@@ -37,7 +37,7 @@ SensirionI2CSen5x sen5x;
 // global variables
 
 // PM sensor data
-typedef struct
+typedef struct envData
 {
   float massConcentrationPm1p0;   // PM1.0 [µg/m³], NAN if unknown
   float massConcentrationPm2p5;   // PM2.5 [µg/m³], NAN if unknown
@@ -51,9 +51,9 @@ typedef struct
 envData sensorData;
 
 float humidityTotal = 0;  // running total of humidity over report interval
-float tempFTotal = 0;     // running total of temperature over report interval
+float temperatureFTotal = 0;     // running total of temperature over report interval
 float vocTotal = 0;       // running total of VOC over report interval
-float avgTempF = 0;       // average temperature over report interval
+float avgtemperatureF = 0;       // average temperature over report interval
 float avgHumidity = 0;    // average humidity over report interval
 float avgVOC = 0;         // average VOC over report interval
 
@@ -72,7 +72,7 @@ int rssi = 0;  // WiFi RSSI value
 
 // External function dependencies
 #ifdef DWEET
-  extern void post_dweet(float pm25, float minaqi, float maxaqi, float aqi, float tempF, float vocIndex, float humidity);
+  extern void post_dweet(float pm25, float minaqi, float maxaqi, float aqi, float temperatureF, float vocIndex, float humidity, int rssi);
 #endif
 
 #ifdef THINGSPEAK
@@ -80,7 +80,7 @@ int rssi = 0;  // WiFi RSSI value
 #endif
 
 #ifdef INFLUX
-  extern bool post_influx(float pm25, float aqi, float tempF, float vocIndex, float humidity, int rssi);
+  extern bool post_influx(float pm25, float aqi, float temperatureF, float vocIndex, float humidity, int rssi);
 #endif
 
 #ifdef MQTT
@@ -91,11 +91,17 @@ int rssi = 0;  // WiFi RSSI value
   // managed here (so needs to be defined here).
   #include <Adafruit_MQTT.h>
   #include <Adafruit_MQTT_Client.h>
-  Adafruit_MQTT_Client pm25_mqtt(&client, MQTT_BROKER, MQTT_PORT, CLIENT_ID, MQTT_USER, MQTT_PASS);
+  Adafruit_MQTT_Client aq_mqtt(&client, MQTT_BROKER, MQTT_PORT, CLIENT_ID, MQTT_USER, MQTT_PASS);
 
-// Adafruit PMSA003I
   extern bool mqttDeviceWiFiUpdate(int rssi);
-  extern bool mqttSensorUpdate(float pm25, float aqi, float tempF, float vocIndex, float humidity);
+  extern bool mqttSensorTemperatureFUpdate(float temperatureF);
+  extern bool mqttSensorHumidityUpdate(float humidity);
+  extern bool mqttSensorPM25Update(float pm25);
+  extern bool mqttSensorAQIUpdate(float aqi);
+  extern bool mqttSensorVOCIndexUpdate(float vocIndex);
+  #ifdef HASSIO_MQTT
+    extern void hassio_mqtt_publish(float pm25, float aqi, float temperatureF, float vocIndex, float humidity);
+  #endif
 #endif
 
 void setup() {
@@ -149,7 +155,7 @@ void loop()
 
       // add to the running totals
       pm25Total += sensorData.massConcentrationPm2p5;
-      tempFTotal += sensorData.ambientTemperatureF;
+      temperatureFTotal += sensorData.ambientTemperatureF;
       humidityTotal += sensorData.ambientHumidity;
       vocTotal += sensorData.vocIndex;
 
@@ -160,7 +166,7 @@ void loop()
       debugMessage(String("VOC: ") + sensorData.vocIndex,1);
       debugMessage(String("Sample #") + numSamples + String(", running totals: "),1);
       debugMessage(String("PM25 total: ") + pm25Total,1);
-      debugMessage(String("TempF total: ") + tempFTotal,1);
+      debugMessage(String("temperatureF total: ") + temperatureFTotal,1);
       debugMessage(String("Humidity total: ") + humidityTotal,1);
       debugMessage(String("VOC total: ") + vocTotal,1);
 
@@ -187,14 +193,14 @@ void loop()
         if (avgPM25 > MaxPm25) MaxPm25 = avgPM25;
         if (avgPM25 < MinPm25) MinPm25 = avgPM25;
 
-        avgTempF = tempFTotal / numSamples;
+        avgtemperatureF = temperatureFTotal / numSamples;
         avgVOC = vocTotal / numSamples;
         avgHumidity = humidityTotal / numSamples;
 
         debugMessage("----- Reporting -----",1);
         debugMessage(String("Reporting averages (") + REPORT_INTERVAL + String(" minute): "),1);
         debugMessage(String("PM2.5: ") + avgPM25 + String(" = AQI ") + pm25toAQI(avgPM25),1);
-        debugMessage(String("Temp: ") + avgTempF + String(" F"),1);
+        debugMessage(String("Temp: ") + avgtemperatureF + String(" F"),1);
         debugMessage(String("Humidity: ") + avgHumidity + String("%"),1);
         debugMessage(String("VoC: ") + avgVOC,1);
 
@@ -202,7 +208,7 @@ void loop()
         {
           /* Post both the current readings and historical max/min readings to the internet */
           #ifdef DWEET
-            post_dweet(avgPM25, pm25toAQI(MinPm25), pm25toAQI(MaxPm25), pm25toAQI(avgPM25), avgTempF, avgVOC, avgHumidity);
+            post_dweet(avgPM25, pm25toAQI(MinPm25), pm25toAQI(MaxPm25), pm25toAQI(avgPM25), avgtemperatureF, avgVOC, avgHumidity, rssi);
           #endif
 
           // Also post the AQI sensor data to ThingSpeak
@@ -211,22 +217,29 @@ void loop()
           #endif
 
           #ifdef INFLUX
-            if (!post_influx(avgPM25, pm25toAQI(avgPM25), avgTempF, avgVOC, avgHumidity, rssi))
+            if (!post_influx(avgPM25, pm25toAQI(avgPM25), avgtemperatureF, avgVOC, avgHumidity, rssi))
               debugMessage("Did not write to influxDB",1);
           #endif
 
           #ifdef MQTT
             if (!mqttDeviceWiFiUpdate(rssi))
-              debugMessage("Did not write device data to MQTT broker",1);
-            if (!mqttSensorUpdate(avgPM25, pm25toAQI(avgPM25), avgTempF, avgVOC, avgHumidity))
-              debugMessage("Did not write environment data to MQTT broker",1);
+                debugMessage("Did not write device data to MQTT broker",1);
+            if ((!mqttSensorTemperatureFUpdate(avgtemperatureF)) || (!mqttSensorHumidityUpdate(avgHumidity)) || (!mqttSensorPM25Update(avgPM25)) || (!mqttSensorAQIUpdate(pm25toAQI(avgPM25))) || (!mqttSensorVOCIndexUpdate(avgVOC)))
+                debugMessage("Did not write environment data to MQTT broker",1);
+            #ifdef HASSIO_MQTT
+              debugMessage("Establishing MQTT for Home Assistant",1);
+              // Either configure sensors in Home Assistant's configuration.yaml file
+              // directly or attempt to do it via MQTT auto-discovery
+              // hassio_mqtt_setup();  // Config for MQTT auto-discovery
+              hassio_mqtt_publish(avgPM25, pm25toAQI(avgPM25), avgtemperatureF, avgVOC, avgHumidity);
+            #endif
           #endif
         }
         // Reset counters and accumulators
         prevReportMs = currentMillis;
         numSamples = 0;
         pm25Total = 0;
-        tempFTotal = 0;
+        temperatureFTotal = 0;
         vocTotal = 0;
         humidityTotal = 0;
       }
