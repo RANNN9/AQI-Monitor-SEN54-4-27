@@ -1,4 +1,9 @@
 data/
+supporting material/
 secrets.h
 *.sublime-project
 *.sublime-workspace
+__vm/
+.vs/
+*.sln
+*.vcxproj*

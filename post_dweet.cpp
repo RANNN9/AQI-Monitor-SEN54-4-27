@@ -1,4 +1,7 @@
-// Port of code from Air Quality, modified for AQI use
+/*
+  Project:      pm25
+  Description:  write sensor data to DWEET
+*/
 
 #include "Arduino.h"
 
@@ -7,17 +10,13 @@
 // private credentials for network, MQTT, weather provider
 #include "secrets.h"
 
-// Post a dweet to report sensor data readings.  This routine blocks while
-// talking to the network, so may take a while to execute.
-
 #ifdef DWEET
+  #include <HTTPClient.h> 
 
   // Shared helper function(s)
   extern void debugMessage(String messageText, int messageLevel);
 
-  // David's original PM2.5 dweet code
-  const char* dweet_host = "dweet.io";
-  void post_dweet(float pm25, float minaqi, float maxaqi, float aqi, float tempF, float vocIndex, float humidity)
+  void post_dweet(float pm25, float minaqi, float maxaqi, float aqi, float temperatureF, float vocIndex, float humidity, int rssi)
   {
     WiFiClient dweet_client;
 
@@ -25,24 +24,21 @@
       debugMessage("Lost network connection to " + String(WIFI_SSID) + "!",1);
       return;
     }
-    
-    debugMessage("Connecting to " + String(dweet_host) + " as " + String(DWEET_DEVICE),1);
-        
+
     // Use our WiFiClient to connect to dweet
-    if (!dweet_client.connect(dweet_host, 80)) {
-      debugMessage("Connection failed!",1);
+    if (!dweet_client.connect(DWEET_HOST, 80)) {
+      debugMessage("Dweet connection failed!",1);
       return;
     }
 
-    long rssi = WiFi.RSSI();
-    IPAddress ip = WiFi.localIP();
+    // Transmit Dweet as HTTP post with a data payload as JSON
 
     // Use HTTP post and send a data payload as JSON
     
     String postdata = "{\"wifi_rssi\":\""     + String(rssi)          + "\"," +
                       "\"AQI\":\""           + String(aqi,2)          + "\"," +
                       "\"address\":\""       + ip.toString()          + "\"," +
-                      "\"temperature\":\""   + String(tempF,1)        + "\"," +
+                      "\"temperature\":\""   + String(temperatureF,1)        + "\"," +
                       "\"vocIndex\":\""      + String(vocIndex,1)     + "\"," +
                       "\"humidity\":\""      + String(humidity,1)     + "\"," +
                       "\"PM25_value\":\""    + String(pm25,2)         + "\"," +
@@ -65,12 +61,12 @@
 
     // Read all the lines of the reply from server (if any) and print them to Serial Monitor
     #ifdef DEBUG
-      debugMessageln("Dweet server response:",1);
+      debugMessageln("Dweet server response:",2);
       while(dweet_client.available()){
         String line = dweet_client.readStringUntil('\r');
-        debugMessage(line,1);
+        debugMessage(line,2);
       }
-      debugMessageln("-----",1);
+      debugMessageln("-----",2);
     #endif
     
     // Close client connection to dweet server
