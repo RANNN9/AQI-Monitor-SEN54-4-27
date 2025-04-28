@@ -5,8 +5,8 @@
 
 // Configuration Step 1: Set WiFi credentials
 // set the WiFi SSID and password to connect to network (data endpoints)
-// #define WIFI_SSID "YOUR_WIFI_SSID"
-// #define WIFI_PASS "YOUR_WIFI_PASSWORD"
+#define WIFI_SSID "UCSD-PROTECTED"
+#define WIFI_PASS "" //no password
 
 // Configuration Step 2: If using MQTT, set MQTT broker login parameters
 // #ifdef MQTT
@@ -17,8 +17,8 @@
 // #endif
 
 // Configuration Step 3: If using ThingSpeak, set login parameters
-// #define THINGS_CHANID 9999999           // ThingSpeak channel ID
-// #define THINGS_APIKEY "CHANNEL_WRITE_APIKEY"// write API key for ThingSpeak Channel
+#define THINGS_CHANID 2937481           // ThingSpeak channel ID
+#define THINGS_APIKEY "723FM7ZHCMT7ZCXJ"// write API key for ThingSpeak Channel
 
 // Configuration Step 4: If using influxdb, set login and storage parameters
 // #ifdef INFLUX
